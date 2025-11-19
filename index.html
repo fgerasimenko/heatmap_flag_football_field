@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mapa de passes – Campo de Flag</title>
+  <style>
+    body {
+      background: #081622;
+      color: #eee;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    #field {
+      max-width: 1100px;
+      width: 100%;
+      height: auto;
+    }
+
+    /* Campo inteiro (verde único) */
+    .field-bg {
+      fill: #0a8a3e;
+      stroke: #ffffff;
+      stroke-width: 4;
+    }
+
+    /* Zona sem corrida nas laterais (estético) */
+    .no-run-zone {
+      fill: #2fd66f;
+      opacity: 0.9;
+    }
+    .no-run-line {
+      stroke: #ffffff;
+      stroke-width: 2;
+      stroke-dasharray: 6 6;
+    }
+
+    /* Linha do meio (separa esquerda x direita) */
+    .mid-line {
+      stroke: #ffffff;
+      stroke-width: 2;
+    }
+
+    /* Grid das zonas */
+    .grid-line {
+      stroke: rgba(255, 255, 255, 0.25);
+      stroke-width: 1;
+    }
+    .zone-rect {
+      stroke: rgba(255, 255, 255, 0.18);
+      stroke-width: 1;
+      fill: transparent;
+    }
+    .zone-fill {
+      stroke: none;
+    }
+
+    /* Pylons dentro das endzones */
+    .pylon-rect {
+      stroke: #ffffff;
+      stroke-width: 1.5;
+      fill: transparent;
+    }
+    .pylon-fill {
+      stroke: none;
+    }
+
+    .zone-label {
+      fill: #ffffff;
+      font-size: 11px;
+      font-weight: 600;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<svg id="field" viewBox="0 0 1000 360"></svg>
+
+<svg id="field" viewBox="0 0 1000 360"></svg>
+
+<script>
+// ==========================
+// 1. DADOS (substitui pelos reais)
+// ==========================
+// TargetFieldZone: SELF_ENDZONE_BACK, SELF_ENDZONE_FRONT,
+//                  0to5, 5to10, 10to15, 15to20, 20to25,
+//                  25to30, 30to35, 35to40, 40to45, 45to50,
+//                  OPP_ENDZONE_FRONT, OPP_ENDZONE_BACK
+// TargetZone: OUT, CURL, HOOK, FRONT_PYLON, BACK_PYLON
+// TargetZoneSide: LEFT, MIDDLE, RIGHT
+const passes = [
+  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT"  },
+  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT"  },
+  { TargetFieldZone: "10to15",           TargetZone: "HOOK",        TargetZoneSide: "MIDDLE"},
+  { TargetFieldZone: "15to20",           TargetZone: "OUT",         TargetZoneSide: "RIGHT" },
+  { TargetFieldZone: "15to20",           TargetZone: "CURL",        TargetZoneSide: "LEFT"  },
+  { TargetFieldZone: "25to30",           TargetZone: "CURL",        TargetZoneSide: "RIGHT" },
+  { TargetFieldZone: "OPP_ENDZONE_FRONT", TargetZone: "FRONT_PYLON", TargetZoneSide: "LEFT" },
+  { TargetFieldZone: "OPP_ENDZONE_BACK",  TargetZone: "BACK_PYLON",  TargetZoneSide: "RIGHT"},
+  { TargetFieldZone: "OPP_ENDZONE_FRONT",  TargetZone: "FRONT_PYLON", TargetZoneSide: "RIGHT"},
+  { TargetFieldZone: "OPP_ENDZONE_BACK",   TargetZone: "BACK_PYLON",  TargetZoneSide: "LEFT" },
+  { TargetFieldZone: "OPP_ENDZONE_BACK",   TargetZone: "CURL",  TargetZoneSide: "LEFT" },
+];
+
+// ==========================
+// 2. CONFIGURAÇÃO DO CAMPO
+// ==========================
+
+// 14 colunas, da esquerda (sua endzone) pra direita (endzone adversária)
+const FIELD_ZONES = [
+  "SELF_ENDZONE_BACK",
+  "SELF_ENDZONE_FRONT",
+  "0to5",
+  "5to10",
+  "10to15",
+  "15to20",
+  "20to25",
+  "25to30",
+  "30to35",
+  "35to40",
+  "40to45",
+  "45to50",
+  "OPP_ENDZONE_FRONT",
+  "OPP_ENDZONE_BACK",
+];
+
+// 5 faixas verticais (de cima pra baixo): OUT L / CURL L / HOOK / CURL R / OUT R
+const LANE_ROWS = {
+  "OUT|LEFT":     0,
+  "CURL|LEFT":    1,
+  "HOOK|MIDDLE":  2,
+  "CURL|RIGHT":   3,
+  "OUT|RIGHT":    4,
+};
+
+// ==========================
+// 3. AGREGAÇÃO
+// ==========================
+
+const zoneCounts = {};
+const pylonCounts = {};
+
+for (const p of passes) {
+  const fz   = String(p.TargetFieldZone || "").trim();
+  const zone = String(p.TargetZone || "").trim();
+  const side = String(p.TargetZoneSide || "").trim();
+  if (!fz || !zone || !side) continue;
+
+  const key = `${fz}|${zone}|${side}`;
+
+  if (zone === "FRONT_PYLON" || zone === "BACK_PYLON") {
+    pylonCounts[key] = (pylonCounts[key] || 0) + 1;
+  } else {
+    zoneCounts[key] = (zoneCounts[key] || 0) + 1;
+  }
+}
+
+const maxNormal = Math.max(1, ...Object.values(zoneCounts), 1);
+const maxPylon  = Math.max(1, ...Object.values(pylonCounts), 1);
+
+// ==========================
+// 4. DESENHO DO CAMPO
+// ==========================
+
+const svg   = document.getElementById("field");
+const width = 1000;
+const height = 360;
+svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+const margin = { top: 30, right: 60, bottom: 30, left: 60 };
+const fieldW = width  - margin.left - margin.right;
+const fieldH = height - margin.top  - margin.bottom;
+
+const cols = FIELD_ZONES.length;  // 14
+const rows = 5;
+const cellW = fieldW / cols;
+const cellH = fieldH / rows;
+
+const fieldGroup = createGroup(svg, margin.left, margin.top);
+
+// fundo verde único
+createRect(fieldGroup, 0, 0, fieldW, fieldH, "field-bg");
+
+// linha do meio (separa esquerda/direita)
+createLine(fieldGroup, fieldW / 2, 0, fieldW / 2, fieldH, "mid-line");
+
+createLine(fieldGroup, fieldW / 2, 0, fieldW / 2, fieldH, "mid-line");
+
+// grid horizontal (faixas OUT / CURL / HOOK)
+for (let r = 0; r <= rows; r++) {
+  const y = r * cellH;
+  createLine(fieldGroup, 0, y, fieldW, y, "grid-line");
+}
+
+// grid vertical (14 colunas de 5 jardas)
+for (let c = 0; c <= cols; c++) {
+  const x = c * cellW;
+  createLine(fieldGroup, x, 0, x, fieldH, "grid-line");
+}
+
+// linhas “de goal” das endzones
+const xSelfGoal = (FIELD_ZONES.indexOf("SELF_ENDZONE_FRONT") + 1) * cellW; // entre SELF_ENDZONE_FRONT e 0to5
+const xOppGoal  = FIELD_ZONES.indexOf("OPP_ENDZONE_FRONT") * cellW;        // entre 45to50 e OPP_ENDZONE_FRONT
+
+createLine(fieldGroup, xSelfGoal, 0, xSelfGoal, fieldH, "mid-line");
+createLine(fieldGroup, xOppGoal,  0, xOppGoal,  fieldH, "mid-line");
+
+// ******************************************
+// seta de orientação do campo (da direita -> esquerda), embaixo do campo
+const arrowGroup = createGroup(svg, 0, 0);
+
+const arrowY = margin.top + fieldH + 18; // posição vertical abaixo do campo
+const arrowStartX = margin.left + 40;         // ponta esquerda (início)
+const arrowEndX   = margin.left + fieldW - 40; // ponta direita (fim)
+
+
+// linha da seta (da direita para a esquerda)
+createLine(arrowGroup, arrowStartX, arrowY, arrowEndX, arrowY, "mid-line");
+
+// cabeça da seta (triângulo apontando para a direita)
+const arrowHead = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+arrowHead.setAttribute(
+  "points",
+  `${arrowEndX},${arrowY} ${arrowEndX-18},${arrowY-8} ${arrowEndX-18},${arrowY+8}`
+);
+arrowHead.setAttribute("fill", "#ffffff");
+arrowGroup.appendChild(arrowHead);
+
+// (opcional) texto explicando o sentido
+createText(arrowGroup, (arrowStartX + arrowEndX) / 2, arrowY - 10, "Sentido do campo", "zone-label");
+// ******************************************
+
+// linhas tracejadas marcando o fim da zona sem corrida (0–5 e 45–50)
+const idxNoRunLeft  = FIELD_ZONES.indexOf("0to5");
+const idxNoRunRight = FIELD_ZONES.indexOf("45to50");
+
+if (idxNoRunLeft !== -1) {
+  const xInnerLeft = (idxNoRunLeft + 1) * cellW; // borda interna de 0–5
+  createLine(fieldGroup, xInnerLeft, 0, xInnerLeft, fieldH, "no-run-line");
+}
+
+if (idxNoRunRight !== -1) {
+  const xInnerRight = idxNoRunRight * cellW; // borda interna de 45–50
+  createLine(fieldGroup, xInnerRight, 0, xInnerRight, fieldH, "no-run-line");
+}
+
+// desenha cada célula de zona (OUT/CURL/HOOK) com heatmap
+for (let c = 0; c < cols; c++) {
+  const fieldZone = FIELD_ZONES[c];
+  const x = c * cellW;
+
+  for (const laneKey in LANE_ROWS) {
+    const rowIndex = LANE_ROWS[laneKey];
+    const y = rowIndex * cellH;
+    const [zoneType, side] = laneKey.split("|");
+    const key = `${fieldZone}|${zoneType}|${side}`;
+    const count = zoneCounts[key] || 0;
+
+    // borda da célula
+    createRect(fieldGroup, x, y, cellW, cellH, "zone-rect");
+
+    if (count > 0) {
+      const intensity = count / maxNormal;        // 0..1
+      const alpha = 0.2 + 0.7 * intensity;        // 0.2..0.9
+      const fill  = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
+
+      const rectFill = createRect(fieldGroup, x, y, cellW, cellH, "zone-fill");
+      rectFill.setAttribute("fill", fill);
+
+      createText(fieldGroup, x + cellW / 2, y + cellH / 2, String(count), "zone-label");
+    }
+  }
+}
+
+// ==========================
+// 5. PYLONS (4 em cada endzone)
+// ==========================
+
+const pylonSize   = cellH * 0.45;
+const pylonMarginY = cellH * 0.10;
+
+// SELF_ENDZONE: BACK (col 0) e FRONT (col 1)
+drawEndzonePylons("SELF_ENDZONE_BACK", "SELF_ENDZONE_FRONT");
+
+// OPP_ENDZONE: FRONT (col 12) e BACK (col 13)
+drawEndzonePylons("OPP_ENDZONE_BACK", "OPP_ENDZONE_FRONT");
+
+function drawEndzonePylons(backZone, frontZone) {
+  const idxBack  = FIELD_ZONES.indexOf(backZone);
+  const idxFront = FIELD_ZONES.indexOf(frontZone);
+  if (idxBack === -1 || idxFront === -1) return;
+
+  const xBack  = idxBack  * cellW + (cellW - pylonSize) / 2;
+  const xFront = idxFront * cellW + (cellW - pylonSize) / 2;
+
+  const topY    = pylonMarginY;
+  const bottomY = fieldH - pylonSize - pylonMarginY;
+
+  // FRONT_PYLON (coluna "front")
+  drawPylonCell(frontZone, "FRONT_PYLON", "LEFT",  xFront, topY);
+  drawPylonCell(frontZone, "FRONT_PYLON", "RIGHT", xFront, bottomY);
+
+  // BACK_PYLON (coluna "back")
+  drawPylonCell(backZone, "BACK_PYLON",  "LEFT",  xBack,  topY);
+  drawPylonCell(backZone, "BACK_PYLON",  "RIGHT", xBack,  bottomY);
+}
+
+function drawPylonCell(fieldZone, zoneType, side, x, y) {
+  const key = `${fieldZone}|${zoneType}|${side}`;
+  const count = pylonCounts[key] || 0;
+
+  createRect(fieldGroup, x, y, pylonSize, pylonSize, "pylon-rect");
+
+  if (count > 0) {
+    const intensity = count / maxPylon;
+    const alpha = 0.2 + 0.7 * intensity;
+    const fill  = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
+
+    const rectFill = createRect(fieldGroup, x, y, pylonSize, pylonSize, "pylon-fill");
+    rectFill.setAttribute("fill", fill);
+
+    createText(fieldGroup, x + pylonSize / 2, y + pylonSize / 2, String(count), "zone-label");
+  }
+}
+
+// ==========================
+// 6. HELPERS SVG
+// ==========================
+
+function createGroup(parent, tx, ty) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  if (tx || ty) g.setAttribute("transform", `translate(${tx},${ty})`);
+  parent.appendChild(g);
+  return g;
+}
+function createLine(parent, x1, y1, x2, y2, cls) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  if (cls) line.setAttribute("class", cls);
+  parent.appendChild(line);
+  return line;
+}
+function createRect(parent, x, y, w, h, cls) {
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", x);
+  rect.setAttribute("y", y);
+  rect.setAttribute("width",  w);
+  rect.setAttribute("height", h);
+  if (cls) rect.setAttribute("class", cls);
+  parent.appendChild(rect);
+  return rect;
+}
+function createText(parent, x, y, text, cls) {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  t.setAttribute("x", x);
+  t.setAttribute("y", y);
+  if (cls) t.setAttribute("class", cls);
+  t.textContent = text;
+  parent.appendChild(t);
+  return t;
+}
+
+</script>
+
+</body>
+</html>
