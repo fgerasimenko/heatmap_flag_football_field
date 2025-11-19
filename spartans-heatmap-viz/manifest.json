@@ -1,0 +1,22 @@
+{
+  "name": "Spartans Flag Field Package",
+  "organization": "Spartans",
+  "description": "Heatmap de passes em campo de Flag Football (completos/tentados por zona).",
+  "logoUrl": "https://fgerasimenko.github.io/heatmap_flag_football_field/logo.png",
+  "organizationUrl": "https://fgerasimenko.github.io",
+  "supportUrl": "https://fgerasimenko.github.io/heatmap_flag_football_field",
+  "packageUrl": "https://fgerasimenko.github.io/heatmap_flag_football_field",
+  "devMode": true,
+  "components": [
+    {
+      "id": "spartans-flag-field-heatmap",
+      "name": "Spartans Flag Field Heatmap",
+      "description": "Mapa de calor dos passes (completos/tentados) por zona do campo, incluindo pylons.",
+      "iconUrl": "https://fgerasimenko.github.io/heatmap_flag_football_field/icon.png",
+      "resource": {
+        "js": "gs://flag-heatmap-analytics/heatmap_flag/heatmap_field_viz.js",
+        "config": "gs://flag-heatmap-analytics/heatmap_flag/heatmap_field_config.json"
+      }
+    }
+  ]
+}

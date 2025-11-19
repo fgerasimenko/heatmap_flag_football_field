@@ -1,179 +1,85 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="UTF-8" />
-  <title>Mapa de passes – Campo de Flag</title>
-  <style>
-    body {
-      background: #081622;
-      color: #eee;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 16px;
-      gap: 12px;
-    }
-
-    #field {
-      max-width: 1100px;
-      width: 100%;
-      height: auto;
-    }
-
-    /* Campo inteiro (verde único) */
-    .field-bg {
-      fill: #0a8a3e;
-      stroke: #ffffff;
-      stroke-width: 4;
-    }
-
-    /* Zona sem corrida nas laterais (estético) */
-    .no-run-zone {
-      fill: #2fd66f;
-      opacity: 0.9;
-    }
-    .no-run-line {
-      stroke: #ffffff;
-      stroke-width: 2;
-      stroke-dasharray: 6 6;
-    }
-
-    /* Linha do meio (separa esquerda x direita) */
-    .mid-line {
-      stroke: #ffffff;
-      stroke-width: 2;
-    }
-
-    /* Grid das zonas */
-    .grid-line {
-      stroke: rgba(255, 255, 255, 0.25);
-      stroke-width: 1;
-    }
-    .zone-rect {
-      stroke: rgba(255, 255, 255, 0.18);
-      stroke-width: 1;
-      fill: transparent;
-    }
-    .zone-fill {
-      stroke: none;
-    }
-
-    /* Pylons dentro das endzones */
-    .pylon-rect {
-      stroke: #ffffff;
-      stroke-width: 1.5;
-      fill: transparent;
-    }
-    .pylon-fill {
-      stroke: none;
-    }
-
-    .zone-label {
-      fill: #ffffff;
-      font-size: 11px;
-      font-weight: 600;
-      text-anchor: middle;
-      dominant-baseline: central;
-      pointer-events: none;
-    }
-  </style>
-</head>
-<body>
-
-<svg id="field" viewBox="0 0 1000 360"></svg>
-
-<svg id="field" viewBox="0 0 1000 360"></svg>
-
-<style>
-    body {
-      background: #081622;
-      color: #eee;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 16px;
-      gap: 12px;
-    }
-
-    #field {
-      max-width: 1100px;
-      width: 100%;
-      height: auto;
-    }
-
-    /* Campo inteiro (verde único) */
-    .field-bg {
-      fill: #0a8a3e;
-      stroke: #ffffff;
-      stroke-width: 4;
-    }
-
-    /* Zona sem corrida nas laterais (estético) */
-    .no-run-zone {
-      fill: #2fd66f;
-      opacity: 0.9;
-    }
-    .no-run-line {
-      stroke: #ffffff;
-      stroke-width: 2;
-      stroke-dasharray: 6 6;
-    }
-
-    /* Linha do meio (separa esquerda x direita) */
-    .mid-line {
-      stroke: #ffffff;
-      stroke-width: 2;
-    }
-
-    /* Grid das zonas */
-    .grid-line {
-      stroke: rgba(255, 255, 255, 0.25);
-      stroke-width: 1;
-    }
-    .zone-rect {
-      stroke: rgba(255, 255, 255, 0.18);
-      stroke-width: 1;
-      fill: transparent;
-    }
-    .zone-fill {
-      stroke: none;
-    }
-
-    /* Pylons dentro das endzones */
-    .pylon-rect {
-      stroke: #ffffff;
-      stroke-width: 1.5;
-      fill: transparent;
-    }
-    .pylon-fill {
-      stroke: none;
-    }
-
-    .zone-label {
-      fill: #ffffff;
-      font-size: 11px;
-      font-weight: 600;
-      text-anchor: middle;
-      dominant-baseline: central;
-      pointer-events: none;
-    }
-  </style>
-</head>
-<body>
-
-<svg id="field" viewBox="0 0 1000 360"></svg>
-
-<script>
+// Spartans Flag Field Heatmap - viz source (sem dscc.min.js ainda)
 (function () {
-  // Renderiza o campo a partir do array `passes`
-  function renderField(svg, passes) {
-    // ==========================
-    // 2. CONFIGURAÇÃO DO CAMPO
-    // ==========================
+  // ----------------------
+  // 0. Inject CSS once
+  // ----------------------
+  let stylesInjected = false;
+  function ensureStyles() {
+    if (stylesInjected) return;
+    stylesInjected = true;
 
-    // 14 colunas, da esquerda (sua endzone) pra direita (endzone adversária)
+    const style = document.createElement('style');
+    style.innerHTML = `
+      svg {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .field-bg {
+        fill: #1b5e20;
+      }
+      .mid-line {
+        stroke: #ffffff;
+        stroke-width: 3;
+      }
+      .grid-line {
+        stroke: #ffffff;
+        stroke-width: 1;
+        stroke-opacity: 0.2;
+      }
+      .no-run-line {
+        stroke: #ffffff;
+        stroke-width: 2;
+        stroke-dasharray: 4 4;
+        stroke-opacity: 0.8;
+      }
+      .zone-rect {
+        fill: none;
+        stroke: rgba(255,255,255,0.25);
+        stroke-width: 1;
+      }
+      .zone-fill {
+        /* fill set dynamically */
+      }
+      .pylon-rect {
+        fill: none;
+        stroke: rgba(255,255,255,0.7);
+        stroke-width: 1.5;
+      }
+      .pylon-fill {
+        /* fill set dynamically */
+      }
+      .zone-label {
+        fill: #ffffff;
+        font-size: 11px;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // ----------------------
+  // 1. Render function
+  // ----------------------
+  function renderField(passes) {
+    ensureStyles();
+
+    // Get or create SVG container
+    let svg = document.getElementById("field");
+    if (!svg) {
+      svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("id", "field");
+      svg.style.width = "100%";
+      svg.style.height = "100%";
+      document.body.appendChild(svg);
+    }
+
+    // Clear previous content
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // ==========================
+    // 2. FIELD CONFIG
+    // ==========================
     const FIELD_ZONES = [
       "SELF_ENDZONE_BACK",
       "SELF_ENDZONE_FRONT",
@@ -191,7 +97,6 @@
       "OPP_ENDZONE_BACK"
     ];
 
-    // 5 faixas verticais (de cima pra baixo): OUT L / CURL L / HOOK / CURL R / OUT R
     const LANE_ROWS = {
       "OUT|LEFT": 0,
       "CURL|LEFT": 1,
@@ -201,9 +106,8 @@
     };
 
     // ==========================
-    // 3. AGREGAÇÃO (att/comp)
+    // 3. AGGREGATION (att/comp)
     // ==========================
-
     const zoneCounts = {};   // key -> { att, comp }
     const pylonCounts = {};  // key -> { att, comp }
 
@@ -239,12 +143,8 @@
     );
 
     // ==========================
-    // 4. DESENHO DO CAMPO
+    // 4. DRAW FIELD
     // ==========================
-
-    // limpa o SVG
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-
     const width = 1000;
     const height = 360;
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -260,49 +160,47 @@
 
     const fieldGroup = createGroup(svg, margin.left, margin.top);
 
-    // fundo verde único
+    // background
     createRect(fieldGroup, 0, 0, fieldW, fieldH, "field-bg");
 
-    // linha do meio (separa esquerda/direita)
+    // mid field line
     createLine(fieldGroup, fieldW / 2, 0, fieldW / 2, fieldH, "mid-line");
 
-    // grid horizontal (faixas OUT / CURL / HOOK)
+    // horizontal grid
     for (let r = 0; r <= rows; r++) {
       const y = r * cellH;
       createLine(fieldGroup, 0, y, fieldW, y, "grid-line");
     }
 
-    // grid vertical (14 colunas de 5 jardas)
+    // vertical grid
     for (let c = 0; c <= cols; c++) {
       const x = c * cellW;
       createLine(fieldGroup, x, 0, x, fieldH, "grid-line");
     }
 
-    // linhas tracejadas marcando o fim da zona sem corrida (0–5 e 45–50)
+    // dashed no-run borders (0–5 and 45–50 inner borders)
     const idxNoRunLeft = FIELD_ZONES.indexOf("0to5");
     const idxNoRunRight = FIELD_ZONES.indexOf("45to50");
 
     if (idxNoRunLeft !== -1) {
-      const xInnerLeft = (idxNoRunLeft + 1) * cellW; // borda interna de 0–5
+      const xInnerLeft = (idxNoRunLeft + 1) * cellW;
       createLine(fieldGroup, xInnerLeft, 0, xInnerLeft, fieldH, "no-run-line");
     }
-
     if (idxNoRunRight !== -1) {
-      const xInnerRight = idxNoRunRight * cellW; // borda interna de 45–50
+      const xInnerRight = idxNoRunRight * cellW;
       createLine(fieldGroup, xInnerRight, 0, xInnerRight, fieldH, "no-run-line");
     }
 
-    // linhas “de goal” das endzones
+    // goal lines (endzones)
     const xSelfGoal =
-      (FIELD_ZONES.indexOf("SELF_ENDZONE_FRONT") + 1) * cellW; // entre SELF_ENDZONE_FRONT e 0to5
+      (FIELD_ZONES.indexOf("SELF_ENDZONE_FRONT") + 1) * cellW;
     const xOppGoal =
-      FIELD_ZONES.indexOf("OPP_ENDZONE_FRONT") * cellW; // entre 45to50 e OPP_ENDZONE_FRONT
+      FIELD_ZONES.indexOf("OPP_ENDZONE_FRONT") * cellW;
 
     createLine(fieldGroup, xSelfGoal, 0, xSelfGoal, fieldH, "mid-line");
     createLine(fieldGroup, xOppGoal, 0, xOppGoal, fieldH, "mid-line");
 
-    // desenha cada célula de zona (OUT/CURL/HOOK) com heatmap
-    Object.keys(LANE_ROWS); // só pra garantir ordem previsível se precisar no futuro
+    // zones (OUT/CURL/HOOK) with heatmap + "comp/att"
     for (let c = 0; c < cols; c++) {
       const fieldZone = FIELD_ZONES[c];
       const x = c * cellW;
@@ -316,12 +214,12 @@
         const att = stats.att || 0;
         const comp = stats.comp || 0;
 
-        // borda da célula
+        // border
         createRect(fieldGroup, x, y, cellW, cellH, "zone-rect");
 
         if (att > 0) {
-          const intensity = att / maxNormal; // 0..1
-          const alpha = 0.2 + 0.7 * intensity; // 0.2..0.9
+          const intensity = att / maxNormal;
+          const alpha = 0.2 + 0.7 * intensity;
           const fill = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
 
           const rectFill = createRect(fieldGroup, x, y, cellW, cellH, "zone-fill");
@@ -339,15 +237,12 @@
     }
 
     // ==========================
-    // 5. PYLONS (4 em cada endzone)
+    // 5. PYLONS
     // ==========================
-
     const pylonSize = cellH * 0.45;
     const pylonMarginY = cellH * 0.1;
 
-    // SELF_ENDZONE: BACK (col 0) e FRONT (col 1)
     drawEndzonePylons("SELF_ENDZONE_BACK", "SELF_ENDZONE_FRONT");
-    // OPP_ENDZONE: FRONT (col 12) e BACK (col 13)
     drawEndzonePylons("OPP_ENDZONE_BACK", "OPP_ENDZONE_FRONT");
 
     function drawEndzonePylons(backZone, frontZone) {
@@ -361,11 +256,9 @@
       const topY = pylonMarginY;
       const bottomY = fieldH - pylonSize - pylonMarginY;
 
-      // FRONT_PYLON (coluna "front")
       drawPylonCell(frontZone, "FRONT_PYLON", "LEFT", xFront, topY);
       drawPylonCell(frontZone, "FRONT_PYLON", "RIGHT", xFront, bottomY);
 
-      // BACK_PYLON (coluna "back")
       drawPylonCell(backZone, "BACK_PYLON", "LEFT", xBack, topY);
       drawPylonCell(backZone, "BACK_PYLON", "RIGHT", xBack, bottomY);
     }
@@ -397,32 +290,26 @@
     }
 
     // ==========================
-    // 6. SETA DE ORIENTAÇÃO
+    // 6. ARROW (direction left -> right)
     // ==========================
     const arrowGroup = createGroup(svg, 0, 0);
+    const arrowY = margin.top + fieldH + 18;
+    const arrowStartX = margin.left + 40;
+    const arrowEndX = margin.left + fieldW - 40;
 
-    const arrowY = margin.top + fieldH + 18; // posição vertical abaixo do campo
-    const arrowStartX = margin.left + 40; // ponta esquerda (início)
-    const arrowEndX = margin.left + fieldW - 40; // ponta direita (fim)
-
-    // linha da seta (esquerda -> direita)
     createLine(arrowGroup, arrowStartX, arrowY, arrowEndX, arrowY, "mid-line");
 
-    // cabeça da seta apontando para a direita
     const arrowHead = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "polygon"
     );
     arrowHead.setAttribute(
       "points",
-      `${arrowEndX},${arrowY} ${arrowEndX - 18},${arrowY - 8} ${
-        arrowEndX - 18
-      },${arrowY + 8}`
+      `${arrowEndX},${arrowY} ${arrowEndX - 18},${arrowY - 8} ${arrowEndX - 18},${arrowY + 8}`
     );
     arrowHead.setAttribute("fill", "#ffffff");
     arrowGroup.appendChild(arrowHead);
 
-    // texto explicando o sentido
     createText(
       arrowGroup,
       (arrowStartX + arrowEndX) / 2,
@@ -432,9 +319,8 @@
     );
 
     // ==========================
-    // 7. HELPERS SVG
+    // 7. SVG HELPERS
     // ==========================
-
     function createGroup(parent, tx, ty) {
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       if (tx || ty) g.setAttribute("transform", `translate(${tx},${ty})`);
@@ -472,45 +358,36 @@
     }
   }
 
-  // ==========================
-  // 8. INTEGRAÇÃO COM LOOKER (Community Viz)
-  // ==========================
-
+  // ----------------------
+  // 2. Looker Studio hook
+  // ----------------------
   function drawViz(data /*, config */) {
-    const svg = document.getElementById("field");
-    if (!svg) return;
-
+  // objectTransform → DEFAULT é um array de objetos
     const rows = (data && data.tables && data.tables.DEFAULT) || [];
+
     const passes = rows.map(row => {
-      const fz =
-        (row["dim_TargetFieldZone"] && row["dim_TargetFieldZone"].value) || "";
-      const zone =
-        (row["dim_TargetZone"] && row["dim_TargetZone"].value) || "";
-      const side =
-        (row["dim_TargetZoneSide"] && row["dim_TargetZoneSide"].value) || "";
-      const compVal =
-        (row["met_PassCompleted"] && row["met_PassCompleted"].value) || 0;
+      const fzArr   = row["dim_TargetFieldZone"] || [];
+      const zoneArr = row["dim_TargetZone"] || [];
+      const sideArr = row["dim_TargetZoneSide"] || [];
+      const compArr = row["met_PassCompleted"] || [];
 
       return {
-        TargetFieldZone: String(fz),
-        TargetZone: String(zone),
-        TargetZoneSide: String(side),
-        PassCompleted: !!compVal
+        TargetFieldZone: String(fzArr[0] ?? ""),
+        TargetZone: String(zoneArr[0] ?? ""),
+        TargetZoneSide: String(sideArr[0] ?? ""),
+        PassCompleted: !!(compArr[0])
       };
     });
 
-    renderField(svg, passes);
+    renderField(passes);
   }
 
-  // Se estiver no ambiente do Looker Studio (dscc disponível)
   if (typeof dscc !== "undefined") {
-    dscc.subscribeToData(drawViz, { transform: dscc.tableTransform });
+    // Looker Studio runtime
+    dscc.subscribeToData(drawViz, { transform: dscc.objectTransform });
   } else {
-    // fallback para teste local (opcional): desenha com dados fake se existir #field
+    // Local test fallback (opcional)
     document.addEventListener("DOMContentLoaded", function () {
-      const svg = document.getElementById("field");
-      if (!svg) return;
-
       const samplePasses = [
         {
           TargetFieldZone: "10to15",
@@ -525,7 +402,7 @@
           PassCompleted: false
         },
         {
-          TargetFieldZone: "10to15",
+          TargetFieldZone: "15to20",
           TargetZone: "HOOK",
           TargetZoneSide: "MIDDLE",
           PassCompleted: true
@@ -543,12 +420,7 @@
           PassCompleted: true
         }
       ];
-
-      renderField(svg, samplePasses);
+      renderField(samplePasses);
     });
   }
 })();
-</script>
-
-</body>
-</html>
