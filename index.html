@@ -96,16 +96,16 @@
 // TargetZone: OUT, CURL, HOOK, FRONT_PYLON, BACK_PYLON
 // TargetZoneSide: LEFT, MIDDLE, RIGHT
 const passes = [
-  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT"  },
-  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT"  },
-  { TargetFieldZone: "10to15",           TargetZone: "HOOK",        TargetZoneSide: "MIDDLE"},
-  { TargetFieldZone: "15to20",           TargetZone: "OUT",         TargetZoneSide: "RIGHT" },
-  { TargetFieldZone: "15to20",           TargetZone: "CURL",        TargetZoneSide: "LEFT"  },
-  { TargetFieldZone: "25to30",           TargetZone: "CURL",        TargetZoneSide: "RIGHT" },
-  { TargetFieldZone: "OPP_ENDZONE_FRONT", TargetZone: "FRONT_PYLON", TargetZoneSide: "LEFT" },
-  { TargetFieldZone: "OPP_ENDZONE_BACK",  TargetZone: "BACK_PYLON",  TargetZoneSide: "RIGHT"},
-  { TargetFieldZone: "OPP_ENDZONE_FRONT",  TargetZone: "FRONT_PYLON", TargetZoneSide: "RIGHT"},
-  { TargetFieldZone: "OPP_ENDZONE_BACK",   TargetZone: "BACK_PYLON",  TargetZoneSide: "LEFT" },
+  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT", PassCompleted: true },
+  { TargetFieldZone: "10to15",           TargetZone: "OUT",         TargetZoneSide: "LEFT", PassCompleted: true },
+  { TargetFieldZone: "10to15",           TargetZone: "HOOK",        TargetZoneSide: "MIDDLE", PassCompleted: true },
+  { TargetFieldZone: "15to20",           TargetZone: "OUT",         TargetZoneSide: "RIGHT", PassCompleted: true },
+  { TargetFieldZone: "15to20",           TargetZone: "CURL",        TargetZoneSide: "LEFT", PassCompleted: false },
+  { TargetFieldZone: "25to30",           TargetZone: "CURL",        TargetZoneSide: "RIGHT", PassCompleted: true },
+  { TargetFieldZone: "OPP_ENDZONE_FRONT", TargetZone: "FRONT_PYLON", TargetZoneSide: "LEFT", PassCompleted: true },
+  { TargetFieldZone: "OPP_ENDZONE_BACK",  TargetZone: "BACK_PYLON",  TargetZoneSide: "RIGHT", PassCompleted: true },
+  { TargetFieldZone: "OPP_ENDZONE_FRONT",  TargetZone: "FRONT_PYLON", TargetZoneSide: "RIGHT", PassCompleted: true },
+  { TargetFieldZone: "OPP_ENDZONE_BACK",   TargetZone: "BACK_PYLON",  TargetZoneSide: "LEFT", PassCompleted: false },
   { TargetFieldZone: "OPP_ENDZONE_BACK",   TargetZone: "CURL",  TargetZoneSide: "LEFT" },
 ];
 
@@ -144,8 +144,8 @@ const LANE_ROWS = {
 // 3. AGREGAÇÃO
 // ==========================
 
-const zoneCounts = {};
-const pylonCounts = {};
+const zoneCounts = {};   // key -> { att, comp }
+const pylonCounts = {};  // key -> { att, comp }
 
 for (const p of passes) {
   const fz   = String(p.TargetFieldZone || "").trim();
@@ -153,17 +153,32 @@ for (const p of passes) {
   const side = String(p.TargetZoneSide || "").trim();
   if (!fz || !zone || !side) continue;
 
+  const completed = !!p.PassCompleted; // true/false
   const key = `${fz}|${zone}|${side}`;
 
   if (zone === "FRONT_PYLON" || zone === "BACK_PYLON") {
-    pylonCounts[key] = (pylonCounts[key] || 0) + 1;
+    if (!pylonCounts[key]) pylonCounts[key] = { att: 0, comp: 0 };
+    pylonCounts[key].att += 1;
+    if (completed) pylonCounts[key].comp += 1;
   } else {
-    zoneCounts[key] = (zoneCounts[key] || 0) + 1;
+    if (!zoneCounts[key]) zoneCounts[key] = { att: 0, comp: 0 };
+    zoneCounts[key].att += 1;
+    if (completed) zoneCounts[key].comp += 1;
   }
 }
 
-const maxNormal = Math.max(1, ...Object.values(zoneCounts), 1);
-const maxPylon  = Math.max(1, ...Object.values(pylonCounts), 1);
+// intensidade do heatmap baseada em TENTATIVAS
+const maxNormal = Math.max(
+  1,
+  ...Object.values(zoneCounts).map(z => z.att || 0),
+  1
+);
+const maxPylon = Math.max(
+  1,
+  ...Object.values(pylonCounts).map(z => z.att || 0),
+  1
+);
+
 
 // ==========================
 // 4. DESENHO DO CAMPO
@@ -261,20 +276,28 @@ for (let c = 0; c < cols; c++) {
     const y = rowIndex * cellH;
     const [zoneType, side] = laneKey.split("|");
     const key = `${fieldZone}|${zoneType}|${side}`;
-    const count = zoneCounts[key] || 0;
+    const stats = zoneCounts[key] || { att: 0, comp: 0 };
+    const { att, comp } = stats;
 
     // borda da célula
     createRect(fieldGroup, x, y, cellW, cellH, "zone-rect");
 
-    if (count > 0) {
-      const intensity = count / maxNormal;        // 0..1
+    if (att > 0) {
+      const intensity = att / maxNormal;          // 0..1 (baseado em tentativas)
       const alpha = 0.2 + 0.7 * intensity;        // 0.2..0.9
       const fill  = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
 
       const rectFill = createRect(fieldGroup, x, y, cellW, cellH, "zone-fill");
       rectFill.setAttribute("fill", fill);
 
-      createText(fieldGroup, x + cellW / 2, y + cellH / 2, String(count), "zone-label");
+      // texto no formato "comp/att" (ex: 2/10)
+      createText(
+        fieldGroup,
+        x + cellW / 2,
+        y + cellH / 2,
+        `${comp}/${att}`,
+        "zone-label"
+      );
     }
   }
 }
@@ -314,19 +337,26 @@ function drawEndzonePylons(backZone, frontZone) {
 
 function drawPylonCell(fieldZone, zoneType, side, x, y) {
   const key = `${fieldZone}|${zoneType}|${side}`;
-  const count = pylonCounts[key] || 0;
+  const stats = pylonCounts[key] || { att: 0, comp: 0 };
+  const { att, comp } = stats;
 
   createRect(fieldGroup, x, y, pylonSize, pylonSize, "pylon-rect");
 
-  if (count > 0) {
-    const intensity = count / maxPylon;
+  if (att > 0) {
+    const intensity = att / maxPylon;
     const alpha = 0.2 + 0.7 * intensity;
     const fill  = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
 
     const rectFill = createRect(fieldGroup, x, y, pylonSize, pylonSize, "pylon-fill");
     rectFill.setAttribute("fill", fill);
 
-    createText(fieldGroup, x + pylonSize / 2, y + pylonSize / 2, String(count), "zone-label");
+    createText(
+      fieldGroup,
+      x + pylonSize / 2,
+      y + pylonSize / 2,
+      `${comp}/${att}`,
+      "zone-label"
+    );
   }
 }
 
