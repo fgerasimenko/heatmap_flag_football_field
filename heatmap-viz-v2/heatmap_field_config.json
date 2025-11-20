@@ -8,56 +8,39 @@
           "id": "dim_TargetFieldZone",
           "label": "Target Field Zone",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["DEFAULT"]
-          }
+          "options": { "min": 1, "max": 1, "supportedTypes": ["DEFAULT"] }
         },
         {
           "id": "dim_TargetZone",
           "label": "Target Zone",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["DEFAULT"]
-          }
+          "options": { "min": 1, "max": 1, "supportedTypes": ["DEFAULT"] }
         },
         {
           "id": "dim_TargetZoneSide",
           "label": "Target Zone Side",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["DEFAULT"]
-          }
+          "options": { "min": 1, "max": 1, "supportedTypes": ["DEFAULT"] }
+        },
+        {
+          "id": "dim_StartFieldZone",
+          "label": "Start Field Zone (optional)",
+          "type": "DIMENSION",
+          "options": { "min": 0, "max": 1, "supportedTypes": ["DEFAULT"] }
         },
         {
           "id": "met_PassAttempts",
           "label": "Pass Attempts (Record Count)",
           "type": "METRIC",
-          "options": {
-            "min": 1,
-            "max": 1
-          }
+          "options": { "min": 1, "max": 1 }
         },
         {
           "id": "met_PassCompleted",
-          "label": "Pass Completed (0/1 ou TRUE/FALSE)",
+          "label": "Pass Completed",
           "type": "METRIC",
-          "options": {
-            "min": 1,
-            "max": 1
-          }
+          "options": { "min": 1, "max": 1 }
         }
       ]
     }
-  ],
-  "style": [],
-  "interactions": [],
-  "features": {
-    "enableComparisonDateRange": false
-  }
+  ]
 }
