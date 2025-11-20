@@ -1,9 +1,15 @@
 // Spartans Flag Field Heatmap - source (sem dscc.min.js)
 (function () {
+  // ==========================
+  // ESTADO GLOBAL
+  // ==========================
+  let stylesInjected = false;
+  let lastPasses = [];
+  let selectedZoneKey = null; // ex: "15to20|HOOK|MIDDLE"
+
   // ----------------------
   // 0. CSS injetado
   // ----------------------
-  let stylesInjected = false;
   function ensureStyles() {
     if (stylesInjected) return;
     stylesInjected = true;
@@ -47,6 +53,13 @@
         stroke-width: 2;
       }
 
+      /* Marcas de 1 jarda na borda inferior */
+      .yard-tick {
+        stroke: #ffffff;
+        stroke-width: 1;
+        stroke-opacity: 0.7;
+      }
+
       /* Grid das zonas */
       .grid-line {
         stroke: rgba(255, 255, 255, 0.25);
@@ -80,9 +93,14 @@
         pointer-events: none;
       }
 
-      /* Linhas dos passes */
+      /* Célula clicável (hitbox) */
+      .zone-hit {
+        fill: transparent;
+        cursor: pointer;
+      }
+
+      /* Linhas dos passes (AirYds) */
       .pass-line {
-        stroke: #ffd740;
         stroke-width: 3;
         stroke-linecap: round;
         stroke-opacity: 0.8;
@@ -92,15 +110,36 @@
         stroke: #000000;
         stroke-width: 1;
       }
+      .pass-x {
+        stroke-width: 2.5;
+        stroke-linecap: round;
+      }
+
+      /* Linhas de YAC */
+      .yac-line {
+        stroke: #40c4ff;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-dasharray: 6 4;
+        stroke-opacity: 0.8;
+      }
+      .yac-x {
+        stroke: #40c4ff;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-opacity: 0.8;
+      }
     `;
     document.head.appendChild(style);
   }
 
-  // ----------------------
-  // 1. Renderiza o campo a partir do array `passes`
-  // ----------------------
-  function renderField(passes) {
+  // ==========================
+  // 1. FUNÇÃO PRINCIPAL DE DESENHO
+  // ==========================
+  function renderField() {
     ensureStyles();
+
+    const passes = lastPasses || [];
 
     // Pega ou cria o SVG
     let svg = document.getElementById("field");
@@ -147,30 +186,30 @@
     };
 
     // ==========================
-    // 3. AGREGAÇÃO (att/comp)
+    // 3. AGREGAÇÃO (att/comp) p/ heatmap
     // ==========================
 
     const zoneCounts = {};   // key -> { att, comp }
     const pylonCounts = {};  // key -> { att, comp }
+    const pylonCenters = {}; // key -> { cx, cy, x, y, w, h }
 
-    (passes || []).forEach(p => {
+    passes.forEach(p => {
       const fz   = String(p.TargetFieldZone || "").trim();
       const zone = String(p.TargetZone || "").trim();
       const side = String(p.TargetZoneSide || "").trim();
       if (!fz || !zone || !side) return;
 
-      const attempts    = Number(p.Attempts    || 0);
-      const completions = Number(p.Completions || 0);
+      const passCompleted = !!p.PassCompleted;
       const key = `${fz}|${zone}|${side}`;
 
       if (zone === "FRONT_PYLON" || zone === "BACK_PYLON") {
         if (!pylonCounts[key]) pylonCounts[key] = { att: 0, comp: 0 };
-        pylonCounts[key].att  += attempts;
-        pylonCounts[key].comp += completions;
+        pylonCounts[key].att  += 1;
+        pylonCounts[key].comp += passCompleted ? 1 : 0;
       } else {
         if (!zoneCounts[key]) zoneCounts[key] = { att: 0, comp: 0 };
-        zoneCounts[key].att  += attempts;
-        zoneCounts[key].comp += completions;
+        zoneCounts[key].att  += 1;
+        zoneCounts[key].comp += passCompleted ? 1 : 0;
       }
     });
 
@@ -244,7 +283,22 @@
     createLine(fieldGroup, xSelfGoal, 0, xSelfGoal, fieldH, "mid-line");
     createLine(fieldGroup, xOppGoal, 0, xOppGoal, fieldH, "mid-line");
 
-    // desenha cada célula de zona (OUT/CURL/HOOK) com heatmap
+    // Pequenas marcas de jarda (0..50) na borda inferior (sem endzones)
+    const yardTickHeight = 6;
+    for (let yard = 0; yard <= 50; yard++) {
+      const tX = xSelfGoal + (yard / 5) * cellW;
+      if (tX < xSelfGoal - 0.5 || tX > xOppGoal + 0.5) continue;
+      createLine(
+        fieldGroup,
+        tX,
+        fieldH,
+        tX,
+        fieldH - yardTickHeight,
+        "yard-tick"
+      );
+    }
+
+    // desenha cada célula de zona (OUT/CURL/HOOK) com heatmap + click
     for (let c = 0; c < cols; c++) {
       const fieldZone = FIELD_ZONES[c];
       const x = c * cellW;
@@ -291,6 +345,18 @@
 
           createText(fieldGroup, labelX, labelY, `${comp}/${att}`, "zone-label");
         }
+
+        // hitbox clicável da zona
+        const hitRect = createRect(fieldGroup, x, y, cellW, cellH, "zone-hit");
+        hitRect.addEventListener("click", () => {
+          const zoneKey = key;
+          if (selectedZoneKey === zoneKey) {
+            selectedZoneKey = null; // desmarca
+          } else {
+            selectedZoneKey = zoneKey;
+          }
+          renderField(); // redesenha com/sem linhas
+        });
       }
     }
 
@@ -332,6 +398,16 @@
       const att = stats.att || 0;
       const comp = stats.comp || 0;
 
+      // salva centro do pylon pra desenhar linhas de passe até ele
+      pylonCenters[key] = {
+        cx: x + pylonSize / 2,
+        cy: y + pylonSize / 2,
+        x,
+        y,
+        w: pylonSize,
+        h: pylonSize
+      };
+
       // limpa o heatmap embaixo do pylon
       createRect(fieldGroup, x, y, pylonSize, pylonSize, "field-bg-overlay");
 
@@ -354,47 +430,195 @@
           "zone-label"
         );
       }
+
+      // hitbox clicável do pylon
+      const hitRect = createRect(fieldGroup, x, y, pylonSize, pylonSize, "zone-hit");
+      hitRect.addEventListener("click", () => {
+        if (selectedZoneKey === key) {
+          selectedZoneKey = null;
+        } else {
+          selectedZoneKey = key;
+        }
+        renderField();
+      });
+    }
+
+    function clamp(v, min, max) {
+      return v < min ? min : v > max ? max : v;
+    }
+
+    // Calcula coordenada vertical (Y) de destino (normal ou pylon)
+    function getTargetY(p) {
+      const fieldZone = String(p.TargetFieldZone || "").trim();
+      const zoneType  = String(p.TargetZone || "").trim();
+      const side      = String(p.TargetZoneSide || "").trim();
+      const key       = `${fieldZone}|${zoneType}|${side}`;
+
+      // Se for pylon, usa o centro salvo
+      if (zoneType === "FRONT_PYLON" || zoneType === "BACK_PYLON") {
+        const info = pylonCenters[key];
+        if (info) return info.cy;
+        return null;
+      }
+
+      const laneKey   = `${zoneType}|${side}`;
+      const laneIndex = LANE_ROWS[laneKey];
+      if (laneIndex == null) return null;
+
+      const y = (laneIndex + 0.5) * cellH;
+      return y;
     }
 
     // ==========================
-    // 6. LINHAS DOS PASSES (opcional)
+    // 6. LINHAS DOS PASSES (AirYds) + YAC
+    //    -> só desenha se houver zona selecionada
     // ==========================
 
-    const hasStartZone = (passes || []).some(p => {
-      const sz = String(p.StartFieldZone || "").trim();
-      return sz && FIELD_ZONES.indexOf(sz) !== -1;
-    });
+    const hasStartYard = passes.some(p => !isNaN(Number(p.StartYard)));
 
-    if (hasStartZone) {
+    if (hasStartYard && selectedZoneKey) {
       const linesGroup = createGroup(fieldGroup, 0, 0);
 
-      (passes || []).forEach(p => {
-        const startZone = String(p.StartFieldZone || "").trim();
-        const targetZone = String(p.TargetFieldZone || "").trim();
-        const zoneType = String(p.TargetZone || "").trim();
-        const side = String(p.TargetZoneSide || "").trim();
+      const passesForZone = passes.filter(p => {
+        const key = `${String(p.TargetFieldZone || "").trim()}|${String(
+          p.TargetZone || ""
+        ).trim()}|${String(p.TargetZoneSide || "").trim()}`;
+        return key === selectedZoneKey;
+      });
 
-        if (!startZone || !targetZone || !zoneType || !side) return;
+      passesForZone.forEach((p, index) => {
+        const passBy  = String(p.PassBy || "").trim();
+        const catchBy = String(p.CatchBy || "").trim();
 
-        const startIdx = FIELD_ZONES.indexOf(startZone);
-        const targetIdx = FIELD_ZONES.indexOf(targetZone);
-        const laneKey = `${zoneType}|${side}`;
-        const laneIndex = LANE_ROWS[laneKey];
+        const startYard = Number(p.StartYard);
+        const airYds    = Number(p.AirYds);
+        const yac       = Number(p.YAC);
 
-        if (startIdx === -1 || targetIdx === -1 || laneIndex == null) return;
+        if (isNaN(startYard)) return;
 
-        const x1 = (startIdx + 0.5) * cellW;
-        const y1 = fieldH / 2; // meio do campo (linha de scrimmage)
-        const x2 = (targetIdx + 0.5) * cellW;
-        const y2 = (laneIndex + 0.5) * cellH;
+        const targetY = getTargetY(p);
+        if (targetY == null) return;
 
-        const attempts = Number(p.Attempts || 0);
-        const opacity = Math.max(0.3, Math.min(0.9, 0.3 + 0.1 * attempts));
+        // --- JITTER VERTICAL LEVE POR PASSE (mais espalhado) ---
+        // 9 níveis: -amp .. +amp
+        const jitterAmp = Math.min(cellH * 0.35, 16);
+        const jitterStep = jitterAmp / 4; // [-4..4] * step
+        const jitter = ((index % 9) - 4) * jitterStep;
 
-        const line = createLine(linesGroup, x1, y1, x2, y2, "pass-line");
-        line.setAttribute("stroke-opacity", opacity);
+        const passCompleted = !!p.PassCompleted;
+        const strokeColor   = passCompleted ? "#00e676" : "#ff5252";
+        const baseOpacity   = 0.85;
 
-        createCircle(linesGroup, x1, y1, 4, "pass-start");
+        const startClamped = clamp(startYard, 0, 50);
+        const airEff = isNaN(airYds) ? 0 : airYds;
+        let catchYard = startClamped + airEff;
+        catchYard = clamp(catchYard, 0, 50);
+
+        const x1 = xSelfGoal + (startClamped / 5) * cellW;
+        const y1 = fieldH / 2 + jitter; // início do passe
+        const x2 = xSelfGoal + (catchYard / 5) * cellW;
+        const y2 = targetY + jitter;     // fim do passe
+
+        const passGroup = createGroup(linesGroup, 0, 0);
+
+        // linha do passe (AirYds)
+        const line = createLine(passGroup, x1, y1, x2, y2, "pass-line");
+        line.setAttribute("stroke", strokeColor);
+        line.setAttribute("stroke-opacity", String(baseOpacity));
+
+        // início
+        createCircle(passGroup, x1, y1, 4, "pass-start");
+
+        // X no fim do passe
+        const xSize = 7;
+        const px1 = createLine(passGroup, x2 - xSize, y2 - xSize, x2 + xSize, y2 + xSize, "pass-x");
+        const px2 = createLine(passGroup, x2 - xSize, y2 + xSize, x2 + xSize, y2 - xSize, "pass-x");
+        [px1, px2].forEach(seg => {
+          seg.setAttribute("stroke", strokeColor);
+          seg.setAttribute("stroke-opacity", String(baseOpacity));
+        });
+
+        // tooltip do passe
+        if (passBy || !isNaN(airYds)) {
+          const titleEl = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "title"
+          );
+          const airStr = !isNaN(airYds) ? `, AirYds: ${airYds}` : "";
+          titleEl.textContent = `PassBy: ${passBy || "N/A"}${airStr}`;
+          passGroup.appendChild(titleEl);
+        }
+
+        // highlight da linha do passe
+        passGroup.addEventListener("mouseover", () => {
+          line.setAttribute("stroke-opacity", "1");
+          px1.setAttribute("stroke-opacity", "1");
+          px2.setAttribute("stroke-opacity", "1");
+          linesGroup.appendChild(passGroup);
+        });
+        passGroup.addEventListener("mouseout", () => {
+          line.setAttribute("stroke-opacity", String(baseOpacity));
+          px1.setAttribute("stroke-opacity", String(baseOpacity));
+          px2.setAttribute("stroke-opacity", String(baseOpacity));
+        });
+
+        // ---- YAC (se existir) ----
+        if (!isNaN(yac) && yac !== 0) {
+          let runYard = catchYard + yac;
+          runYard = clamp(runYard, 0, 50);
+
+          const x3 = xSelfGoal + (runYard / 5) * cellW;
+          const y3 = y2; // mesma linha vertical do alvo, com jitter
+
+          const yacGroup = createGroup(linesGroup, 0, 0);
+          const yacAbs = Math.abs(yac);
+          const yacOpacity = Math.max(0.3, Math.min(0.9, 0.3 + 0.05 * yacAbs));
+
+          const yLine = createLine(yacGroup, x2, y2, x3, y3, "yac-line");
+          yLine.setAttribute("stroke-opacity", String(yacOpacity));
+
+          const ySize = 7;
+          const yx1 = createLine(
+            yacGroup,
+            x3 - ySize,
+            y3 - ySize,
+            x3 + ySize,
+            y3 + ySize,
+            "yac-x"
+          );
+          const yx2 = createLine(
+            yacGroup,
+            x3 - ySize,
+            y3 + ySize,
+            x3 + ySize,
+            y3 - ySize,
+            "yac-x"
+          );
+          [yx1, yx2].forEach(seg => {
+            seg.setAttribute("stroke-opacity", String(yacOpacity));
+          });
+
+          const catchLabel = catchBy || "N/A";
+          const title2 = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "title"
+          );
+          title2.textContent = `CatchBy: ${catchLabel}, YAC: ${yac}`;
+          yacGroup.appendChild(title2);
+
+          // HOVER DO YAC (ficar mais visível e por cima de tudo)
+          yacGroup.addEventListener("mouseover", () => {
+            yLine.setAttribute("stroke-opacity", "1");
+            yx1.setAttribute("stroke-opacity", "1");
+            yx2.setAttribute("stroke-opacity", "1");
+            linesGroup.appendChild(yacGroup);
+          });
+          yacGroup.addEventListener("mouseout", () => {
+            yLine.setAttribute("stroke-opacity", String(yacOpacity));
+            yx1.setAttribute("stroke-opacity", String(yacOpacity));
+            yx2.setAttribute("stroke-opacity", String(yacOpacity));
+          });
+        }
       });
     }
 
@@ -436,7 +660,6 @@
     // ==========================
     // 8. HELPERS SVG
     // ==========================
-
     function createGroup(parent, tx, ty) {
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       if (tx || ty) g.setAttribute("transform", `translate(${tx},${ty})`);
@@ -490,24 +713,34 @@
     const rows = (data && data.tables && data.tables.DEFAULT) || [];
 
     const passes = rows.map(row => {
-      const fzArr    = row["dim_TargetFieldZone"] || [];
-      const zoneArr  = row["dim_TargetZone"] || [];
-      const sideArr  = row["dim_TargetZoneSide"] || [];
-      const startArr = row["dim_StartFieldZone"] || [];
-      const attArr   = row["met_PassAttempts"] || [];
-      const compArr  = row["met_PassCompleted"] || [];
+      const fzArr        = row["dim_TargetFieldZone"] || [];
+      const zoneArr      = row["dim_TargetZone"] || [];
+      const sideArr      = row["dim_TargetZoneSide"] || [];
+      const startZoneArr = row["dim_StartFieldZone"] || [];
+      const passByArr    = row["dim_PassBy"] || [];
+      const catchByArr   = row["dim_CatchBy"] || [];
+      const startYArr    = row["met_StartYard"] || [];
+      const airArr       = row["met_AirYds"] || [];
+      const yacArr       = row["met_YAC"] || [];
+      const completedArr = row["met_PassCompleted"] || []; // 0/1
 
       return {
         TargetFieldZone: String(fzArr[0] ?? ""),
         TargetZone: String(zoneArr[0] ?? ""),
         TargetZoneSide: String(sideArr[0] ?? ""),
-        StartFieldZone: String(startArr[0] ?? ""), // opcional
-        Attempts: Number(attArr[0]  ?? 0),
-        Completions: Number(compArr[0] ?? 0)
+        StartFieldZone: String(startZoneArr[0] ?? ""),
+        PassBy: String(passByArr[0] ?? ""),
+        CatchBy: String(catchByArr[0] ?? ""),
+        StartYard: Number(startYArr[0] ?? NaN),
+        AirYds: Number(airArr[0] ?? NaN),
+        YAC: Number(yacArr[0] ?? NaN),
+        PassCompleted: Number(completedArr[0] ?? 0) ? 1 : 0
       };
     });
 
-    renderField(passes);
+    lastPasses = passes;
+    selectedZoneKey = null; // reset seleção ao mudar filtro
+    renderField();
   }
 
   if (typeof dscc !== "undefined") {
@@ -516,50 +749,846 @@
   } else {
     // Fallback local pra testar em HTML puro
     document.addEventListener("DOMContentLoaded", function () {
-      const samplePasses = [
+      lastPasses = lastPasses = [
         {
-          TargetFieldZone: "15to20",
-          TargetZone: "HOOK",
-          TargetZoneSide: "MIDDLE",
-          StartFieldZone: "10to15",
-          Attempts: 1,
-          Completions: 1
+          "TargetFieldZone": "10to15",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
         },
         {
-          TargetFieldZone: "20to25",
-          TargetZone: "OUT",
-          TargetZoneSide: "RIGHT",
-          StartFieldZone: "15to20",
-          Attempts: 1,
-          Completions: 1
+          "TargetFieldZone": "15to20",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
         },
         {
-          TargetFieldZone: "SELF_ENDZONE_FRONT",
-          TargetZone: "OUT",
-          TargetZoneSide: "RIGHT",
-          StartFieldZone: "SELF_ENDZONE_FRONT",
-          Attempts: 1,
-          Completions: 0
+          "TargetFieldZone": "SELF_ENDZONE",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 2.5,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
         },
         {
-          TargetFieldZone: "OPP_ENDZONE_BACK",
-          TargetZone: "OUT",
-          TargetZoneSide: "RIGHT",
-          StartFieldZone: "20to25",
-          Attempts: 1,
-          Completions: 0
+          "TargetFieldZone": "35to40",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 2.5,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
         },
         {
-          TargetFieldZone: "OPP_ENDZONE_BACK",
-          TargetZone: "BACK_PYLON",
-          TargetZoneSide: "RIGHT",
-          StartFieldZone: "25to30",
-          Attempts: 1,
-          Completions: 1
+          "TargetFieldZone": "10to15",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 5.0,
+          "AirYds": 5.0,
+          "YAC": 2.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 12.0,
+          "AirYds": 6.0,
+          "YAC": 3.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 21.0,
+          "AirYds": 29.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 40.0,
+          "AirYds": 10.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 27.0,
+          "AirYds": 23.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 40.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 5.0,
+          "AirYds": 13.0,
+          "YAC": 1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "25to30",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 19.0,
+          "AirYds": 7.0,
+          "YAC": 5.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "35to40",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 31.0,
+          "AirYds": 7.0,
+          "YAC": 5.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "45to50",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Noturno",
+          "StartYard": 43.0,
+          "AirYds": 6.0,
+          "YAC": 1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 40.0,
+          "AirYds": 10.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "5to10",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Noturno",
+          "StartYard": 5.0,
+          "AirYds": 5.0,
+          "YAC": 3.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 13.0,
+          "AirYds": 10.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 23.0,
+          "AirYds": 27.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 40.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 5.0,
+          "AirYds": 14.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "CatchBy": "Lacra",
+          "StartYard": 19.0,
+          "AirYds": 4.0,
+          "YAC": 9.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "StartYard": 33.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "5to10",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 5.0,
+          "AirYds": 5.0,
+          "YAC": 11.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 21.0,
+          "AirYds": 29.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Febiki",
+          "StartYard": 40.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Tomás",
+          "StartYard": 5.0,
+          "AirYds": 16.0,
+          "YAC": -1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 20.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "30to35",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 20.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "25to30",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 20.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "10to15",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Pedrinho",
+          "StartYard": 5.0,
+          "AirYds": 10.0,
+          "YAC": 6.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "25to30",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Índio",
+          "StartYard": 21.0,
+          "AirYds": 4.0,
+          "YAC": 1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 26.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "30to35",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 26.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Pedrinho",
+          "StartYard": 26.0,
+          "AirYds": 24.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 45.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "10to15",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 5.0,
+          "AirYds": 7.0,
+          "YAC": 14.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 26.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "30to35",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 26.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "35to40",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 27.0,
+          "AirYds": 12.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 38.0,
+          "AirYds": 12.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 45.0,
+          "AirYds": 10.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "35to40",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 5.0,
+          "AirYds": 19.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "25to30",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "CatchBy": "Pedrinho",
+          "StartYard": 24.0,
+          "AirYds": 5.0,
+          "YAC": 3.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "30to35",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Noturno",
+          "StartYard": 32.0,
+          "AirYds": 1.0,
+          "YAC": 11.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 44.0,
+          "AirYds": 6.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 45.0,
+          "AirYds": 5.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "5to10",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 5.0,
+          "AirYds": 3.0,
+          "YAC": 1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "45to50",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 9.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 9.0,
+          "AirYds": 8.0,
+          "YAC": 5.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 22.0,
+          "AirYds": 3.0,
+          "YAC": 5.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 30.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "30to35",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Noturno",
+          "StartYard": 30.0,
+          "AirYds": 1.0,
+          "YAC": 6.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 37.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "StartYard": 37.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "HOOK",
+          "TargetZoneSide": "MIDDLE",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 5.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "15to20",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 5.0,
+          "AirYds": 13.0,
+          "YAC": 1.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Febiki",
+          "StartYard": 19.0,
+          "AirYds": 31.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 45.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 40.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "5to10",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 5.0,
+          "AirYds": 5.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "20to25",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 10.0,
+          "AirYds": 14.0,
+          "YAC": 6.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 30.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "35to40",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "StartYard": 30.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
+        },
+        {
+          "TargetFieldZone": "35to40",
+          "TargetZone": "OUT",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "CatchBy": "Febiki",
+          "StartYard": 30.0,
+          "AirYds": 9.0,
+          "YAC": 8.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Munford",
+          "StartYard": 47.0,
+          "AirYds": 3.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Lacra",
+          "StartYard": 45.0,
+          "AirYds": 5.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "25to30",
+          "TargetZone": "CURL",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Kadu",
+          "CatchBy": "Lacra",
+          "StartYard": 15.0,
+          "AirYds": 12.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_BACK",
+          "TargetZone": "BACK_PYLON",
+          "TargetZoneSide": "RIGHT",
+          "PlayType": "PASS",
+          "PassBy": "Mamão",
+          "CatchBy": "Kadu",
+          "StartYard": 45.0,
+          "AirYds": 5.0,
+          "YAC": 0.0,
+          "PassCompleted": 1
+        },
+        {
+          "TargetFieldZone": "OPP_ENDZONE_FRONT",
+          "TargetZone": "FRONT_PYLON",
+          "TargetZoneSide": "LEFT",
+          "PlayType": "PASS",
+          "PassBy": "Munford",
+          "StartYard": 40.0,
+          "AirYds": 0.0,
+          "YAC": 0.0,
+          "PassCompleted": 0
         }
       ];
-
-      renderField(samplePasses);
+      
+      renderField();
     });
   }
 })();
