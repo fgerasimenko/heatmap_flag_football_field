@@ -7,6 +7,10 @@
   let lastPasses = [];
   let selectedZoneKey = null; // ex: "15to20|HOOK|MIDDLE"
 
+  // Tooltip custom
+  let tooltipDiv = null;
+  let tooltipInitialized = false;
+
   // ----------------------
   // 0. CSS injetado
   // ----------------------
@@ -129,8 +133,247 @@
         stroke-linecap: round;
         stroke-opacity: 0.8;
       }
+
+      /* Retorno de INT (próprio, não igual YAC) */
+      .int-return-line {
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-opacity: 0.9;
+      }
+      .int-return-x {
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-opacity: 0.9;
+      }
+
+      /* Tooltip da jogada */
+      .play-tooltip {
+        position: absolute;
+        background: rgba(15, 23, 42, 0.96); /* bem opaco */
+        color: #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+        padding: 10px 12px;
+        font-size: 12px;
+        max-width: 260px;
+        z-index: 9999;
+        border: 1px solid rgba(148, 163, 184, 0.7);
+      }
+      .play-tooltip-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .play-tooltip-subtitle {
+        font-size: 11px;
+        margin-bottom: 4px;
+        color: #9ca3af;
+      }
+      .play-tooltip-close {
+        cursor: pointer;
+        padding: 0 4px;
+        font-size: 13px;
+      }
+      .play-tooltip-row {
+        margin: 2px 0;
+        line-height: 1.3;
+      }
+      .play-tooltip-label {
+        font-weight: 600;
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  function ensureTooltip() {
+    if (!tooltipDiv) {
+      tooltipDiv = document.createElement("div");
+      tooltipDiv.className = "play-tooltip";
+      tooltipDiv.style.display = "none";
+      document.body.appendChild(tooltipDiv);
+    }
+    if (!tooltipInitialized) {
+      tooltipInitialized = true;
+      document.addEventListener("click", () => {
+        if (tooltipDiv) tooltipDiv.style.display = "none";
+      });
+    }
+  }
+
+  function showPlayTooltip(evt, p, info) {
+    ensureTooltip();
+    evt.stopPropagation();
+    if (!tooltipDiv) return;
+
+    const playId = p.PlayId || "";
+    const gameId = p.GameId || "";
+    const campeonato = p.Campeonato || "";
+    const qb = p.PassBy || "";
+    const target = p.CatchBy || "";
+    const tfz = p.TargetFieldZone || "";
+    const tzone = p.TargetZone || "";
+    const tside = p.TargetZoneSide || "";
+    const first = p.FirstDown || "";
+    const touchdown = p.Touchdown || "";
+
+    const startY =
+      info.startYard != null && !isNaN(info.startYard) ? info.startYard : null;
+    const air =
+      info.airYds != null && !isNaN(info.airYds) ? info.airYds : null;
+    const yac =
+      info.yac != null && !isNaN(info.yac) ? info.yac : null;
+    const down =
+      p.Down != null && !isNaN(p.Down) ? p.Down : null;
+    const toGo =
+      p.ToGo != null && !isNaN(p.ToGo) ? p.ToGo : null;
+
+    const tipWhere =
+      info.tipWhere != null && !isNaN(info.tipWhere) ? info.tipWhere : null;
+    const intWhere =
+      info.intWhere != null && !isNaN(info.intWhere) ? info.intWhere : null;
+    const sackWhere =
+      info.sackWhere != null && !isNaN(info.sackWhere) ? info.sackWhere : null;
+    const intYds =
+      info.intYds != null && !isNaN(info.intYds) ? info.intYds : null;
+
+    let tipo;
+    if (info.kind === "sack") {
+      tipo = "Sack";
+    } else if (info.kind === "int" || info.kind === "int-return") {
+      tipo = "Intercepção";
+    } else if (info.kind === "tip") {
+      tipo = "Passe desviado";
+    } else {
+      tipo = info.completed ? "Passe completo" : "Passe incompleto";
+    }
+
+    let subtitleHtml = "";
+    let rowsHtml = "";
+
+    if (down != null || toGo != null || startY != null) {
+      const parts = [];
+      if (down != null) parts.push(`${down}ª descida`);
+      if (toGo != null) parts.push(`${toGo} para conquistar`);
+      if (startY != null) parts.push(`jarda ${startY}`);
+      subtitleHtml = `<div class="play-tooltip-subtitle">${parts.join(" · ")}</div>`;
+    }
+
+    if (campeonato) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Campeonato:</span> ${campeonato || "-"}</div>`;
+    }
+
+    if (gameId) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Jogo:</span> ${gameId || "-"}</div>`;
+    }
+    if (gameId || playId) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Play:</span> ${playId || "-"}</div>`;
+    } else if (playId) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Play:</span> ${playId}</div>`;
+    }
+
+    rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Tipo:</span> ${tipo}</div>`;
+
+    if (qb) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">QB:</span> ${qb}</div>`;
+    }
+    if (target) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Alvo/Recebedor:</span> ${target}</div>`;
+    }
+
+    if (tfz || tzone || tside) {
+      const zoneTxt = [tfz, tzone, tside].filter(Boolean).join(" · ");
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Zona alvo:</span> ${zoneTxt}</div>`;
+    }
+
+    if (startY != null || air != null || yac != null) {
+      const parts = [];
+      if (startY != null) parts.push(`Start: ${startY}`);
+      if (air != null) parts.push(`Air: ${air}`);
+      if (yac != null) parts.push(`YAC: ${yac}`);
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Jardas:</span> ${parts.join(
+        " · "
+      )}</div>`;
+    }
+
+    if (first || touchdown) {
+      const result = first ? "First down" : "Touchdown"
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label"> Resultado: </span> ${result}`
+    } else {
+
+    }
+
+    if (info.kind === "tip" && (tipWhere != null || p.TipBy)) {
+      const w = tipWhere != null ? tipWhere : "-";
+      const who = p.TipBy || "N/A";
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">TIP:</span> em ${w} jardas por ${who}</div>`;
+    }
+
+    if (
+      (info.kind === "int" || info.kind === "int-return") &&
+      (intWhere != null || p.IntBy)
+    ) {
+      const w = intWhere != null ? intWhere : "-";
+      const who = p.IntBy || "N/A";
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">INT:</span> em ${w} jardas por ${who}</div>`;
+    }
+
+    if (
+      (info.kind === "int" || info.kind === "int-return") &&
+      intYds != null &&
+      intYds !== 0
+    ) {
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Retorno INT:</span> ${intYds} jardas</div>`;
+    }
+
+    if (info.kind === "sack" && (sackWhere != null || p.SackBy)) {
+      const w = sackWhere != null ? sackWhere : "-";
+      const who = p.SackBy || "N/A";
+      rowsHtml += `<div class="play-tooltip-row"><span class="play-tooltip-label">Sack:</span> em ${w} jardas por ${who}</div>`;
+    }
+
+    tooltipDiv.innerHTML = `
+      <div class="play-tooltip-header">
+        <span>${playId ? "Play " + playId : "Detalhes da jogada"}</span>
+        <span class="play-tooltip-close">✕</span>
+      </div>
+      ${subtitleHtml}
+      ${rowsHtml}
+    `;
+
+    tooltipDiv.style.display = "block";
+
+    const closeBtn = tooltipDiv.querySelector(".play-tooltip-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        tooltipDiv.style.display = "none";
+      });
+    }
+
+    // Posiciona perto do clique, sem sair da tela
+    const padding = 10;
+    const viewportWidth =
+      window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight =
+      window.innerHeight || document.documentElement.clientHeight;
+
+    let x = evt.clientX + padding;
+    let y = evt.clientY + padding;
+
+    // mede tooltip após exibir
+    const rect = tooltipDiv.getBoundingClientRect();
+    if (x + rect.width > viewportWidth - 8) {
+      x = viewportWidth - rect.width - 8;
+    }
+    if (y + rect.height > viewportHeight - 8) {
+      y = viewportHeight - rect.height - 8;
+    }
+
+    tooltipDiv.style.left = x + "px";
+    tooltipDiv.style.top = y + "px";
   }
 
   // ==========================
@@ -138,6 +381,7 @@
   // ==========================
   function renderField() {
     ensureStyles();
+    ensureTooltip();
 
     const passes = lastPasses || [];
 
@@ -158,7 +402,6 @@
     // 2. CONFIG DO CAMPO
     // ==========================
 
-    // 14 colunas, da esquerda (sua endzone) pra direita (endzone adversária)
     const FIELD_ZONES = [
       "SELF_ENDZONE_BACK",
       "SELF_ENDZONE_FRONT",
@@ -176,7 +419,6 @@
       "OPP_ENDZONE_BACK"
     ];
 
-    // 5 faixas verticais (de cima pra baixo): OUT L / CURL L / HOOK / CURL R / OUT R
     const LANE_ROWS = {
       "OUT|LEFT": 0,
       "CURL|LEFT": 1,
@@ -186,12 +428,11 @@
     };
 
     // ==========================
-    // 3. AGREGAÇÃO (att/comp) p/ heatmap
+    // 3. AGREGAÇÃO HEATMAP
     // ==========================
-
-    const zoneCounts = {};   // key -> { att, comp }
-    const pylonCounts = {};  // key -> { att, comp }
-    const pylonCenters = {}; // key -> { cx, cy, x, y, w, h }
+    const zoneCounts = {};
+    const pylonCounts = {};
+    const pylonCenters = {};
 
     passes.forEach(p => {
       const fz   = String(p.TargetFieldZone || "").trim();
@@ -227,41 +468,37 @@
     // ==========================
     // 4. DESENHO DO CAMPO
     // ==========================
-
     const width = 1000;
-    const height = 360;
+    const height = 460; // mais espaço pra seta + legenda
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-    const margin = { top: 30, right: 60, bottom: 30, left: 60 };
+    const margin = { top: 30, right: 60, bottom: 80, left: 60 };
     const fieldW = width - margin.left - margin.right;
     const fieldH = height - margin.top - margin.bottom;
 
-    const cols = FIELD_ZONES.length; // 14
+    const cols = FIELD_ZONES.length;
     const rows = 5;
     const cellW = fieldW / cols;
     const cellH = fieldH / rows;
 
     const fieldGroup = createGroup(svg, margin.left, margin.top);
 
-    // fundo verde único
+    // fundo verde
     createRect(fieldGroup, 0, 0, fieldW, fieldH, "field-bg");
 
-    // linha do meio (separa esquerda/direita)
+    // linha meio campo
     createLine(fieldGroup, fieldW / 2, 0, fieldW / 2, fieldH, "mid-line");
 
-    // grid horizontal
+    // grids
     for (let r = 0; r <= rows; r++) {
       const y = r * cellH;
       createLine(fieldGroup, 0, y, fieldW, y, "grid-line");
     }
-
-    // grid vertical
     for (let c = 0; c <= cols; c++) {
       const x = c * cellW;
       createLine(fieldGroup, x, 0, x, fieldH, "grid-line");
     }
 
-    // linhas tracejadas marcando o fim da zona sem corrida (0–5 e 45–50)
     const idxNoRunLeft = FIELD_ZONES.indexOf("0to5");
     const idxNoRunRight = FIELD_ZONES.indexOf("45to50");
 
@@ -274,16 +511,15 @@
       createLine(fieldGroup, xInnerRight, 0, xInnerRight, fieldH, "no-run-line");
     }
 
-    // linhas “de goal” das endzones
     const xSelfGoal =
-      (FIELD_ZONES.indexOf("SELF_ENDZONE_FRONT") + 1) * cellW; // entre SELF_ENDZONE_FRONT e 0to5
+      (FIELD_ZONES.indexOf("SELF_ENDZONE_FRONT") + 1) * cellW;
     const xOppGoal =
-      FIELD_ZONES.indexOf("OPP_ENDZONE_FRONT") * cellW; // entre 45to50 e OPP_ENDZONE_FRONT
+      FIELD_ZONES.indexOf("OPP_ENDZONE_FRONT") * cellW;
 
     createLine(fieldGroup, xSelfGoal, 0, xSelfGoal, fieldH, "mid-line");
     createLine(fieldGroup, xOppGoal, 0, xOppGoal, fieldH, "mid-line");
 
-    // Pequenas marcas de jarda (0..50) na borda inferior (sem endzones)
+    // ticks de 1 jarda
     const yardTickHeight = 6;
     for (let yard = 0; yard <= 50; yard++) {
       const tX = xSelfGoal + (yard / 5) * cellW;
@@ -298,7 +534,7 @@
       );
     }
 
-    // desenha cada célula de zona (OUT/CURL/HOOK) com heatmap + click
+    // células das zonas
     for (let c = 0; c < cols; c++) {
       const fieldZone = FIELD_ZONES[c];
       const x = c * cellW;
@@ -312,64 +548,47 @@
         const att = stats.att || 0;
         const comp = stats.comp || 0;
 
-        // borda da célula
         createRect(fieldGroup, x, y, cellW, cellH, "zone-rect");
 
         if (att > 0) {
-          const intensity = att / maxNormal; // 0..1
-          const alpha = 0.2 + 0.7 * intensity; // 0.2..0.9
+          const intensity = att / maxNormal;
+          const alpha = 0.2 + 0.7 * intensity;
           const fill = `rgba(220, 40, 40, ${alpha.toFixed(2)})`;
 
           const rectFill = createRect(fieldGroup, x, y, cellW, cellH, "zone-fill");
           rectFill.setAttribute("fill", fill);
 
-          // posição padrão no centro da célula
           let labelX = x + cellW / 2;
           let labelY = y + cellH / 2;
 
-          // se for endzone, afasta o texto das áreas dos pylons
           if (fieldZone.includes("ENDZONE")) {
             if (zoneType === "OUT") {
-              if (side === "LEFT") {
-                labelX += cellW * 0.18;
-              } else if (side === "RIGHT") {
-                labelX -= cellW * 0.18;
-              }
+              if (side === "LEFT") labelX += cellW * 0.18;
+              else if (side === "RIGHT") labelX -= cellW * 0.18;
             }
-            if (rowIndex === 0) {
-              labelY += cellH * 0.20;
-            } else if (rowIndex === rows - 1) {
-              labelY -= cellH * 0.20;
-            }
+            if (rowIndex === 0) labelY += cellH * 0.20;
+            else if (rowIndex === rows - 1) labelY -= cellH * 0.20;
           }
 
           createText(fieldGroup, labelX, labelY, `${comp}/${att}`, "zone-label");
         }
 
-        // hitbox clicável da zona
         const hitRect = createRect(fieldGroup, x, y, cellW, cellH, "zone-hit");
         hitRect.addEventListener("click", () => {
           const zoneKey = key;
-          if (selectedZoneKey === zoneKey) {
-            selectedZoneKey = null; // desmarca
-          } else {
-            selectedZoneKey = zoneKey;
-          }
-          renderField(); // redesenha com/sem linhas
+          selectedZoneKey = selectedZoneKey === zoneKey ? null : zoneKey;
+          renderField();
         });
       }
     }
 
     // ==========================
-    // 5. PYLONS (4 em cada endzone)
+    // 5. PYLONS
     // ==========================
-
     const pylonSize = cellH * 0.45;
     const pylonMarginY = cellH * 0.1;
 
-    // SELF_ENDZONE: BACK (col 0) e FRONT (col 1)
     drawEndzonePylons("SELF_ENDZONE_BACK", "SELF_ENDZONE_FRONT");
-    // OPP_ENDZONE: FRONT (col 12) e BACK (col 13)
     drawEndzonePylons("OPP_ENDZONE_BACK", "OPP_ENDZONE_FRONT");
 
     function drawEndzonePylons(backZone, frontZone) {
@@ -383,11 +602,9 @@
       const topY = pylonMarginY;
       const bottomY = fieldH - pylonSize - pylonMarginY;
 
-      // FRONT_PYLON (coluna "front")
       drawPylonCell(frontZone, "FRONT_PYLON", "LEFT", xFront, topY);
       drawPylonCell(frontZone, "FRONT_PYLON", "RIGHT", xFront, bottomY);
 
-      // BACK_PYLON (coluna "back")
       drawPylonCell(backZone, "BACK_PYLON", "LEFT", xBack, topY);
       drawPylonCell(backZone, "BACK_PYLON", "RIGHT", xBack, bottomY);
     }
@@ -398,7 +615,6 @@
       const att = stats.att || 0;
       const comp = stats.comp || 0;
 
-      // salva centro do pylon pra desenhar linhas de passe até ele
       pylonCenters[key] = {
         cx: x + pylonSize / 2,
         cy: y + pylonSize / 2,
@@ -408,10 +624,7 @@
         h: pylonSize
       };
 
-      // limpa o heatmap embaixo do pylon
       createRect(fieldGroup, x, y, pylonSize, pylonSize, "field-bg-overlay");
-
-      // borda do pylon
       createRect(fieldGroup, x, y, pylonSize, pylonSize, "pylon-rect");
 
       if (att > 0) {
@@ -431,14 +644,9 @@
         );
       }
 
-      // hitbox clicável do pylon
       const hitRect = createRect(fieldGroup, x, y, pylonSize, pylonSize, "zone-hit");
       hitRect.addEventListener("click", () => {
-        if (selectedZoneKey === key) {
-          selectedZoneKey = null;
-        } else {
-          selectedZoneKey = key;
-        }
+        selectedZoneKey = selectedZoneKey === key ? null : key;
         renderField();
       });
     }
@@ -447,14 +655,16 @@
       return v < min ? min : v > max ? max : v;
     }
 
-    // Calcula coordenada vertical (Y) de destino (normal ou pylon)
+    function yardToX(yard) {
+      return xSelfGoal + (yard / 5) * cellW;
+    }
+
     function getTargetY(p) {
       const fieldZone = String(p.TargetFieldZone || "").trim();
       const zoneType  = String(p.TargetZone || "").trim();
       const side      = String(p.TargetZoneSide || "").trim();
       const key       = `${fieldZone}|${zoneType}|${side}`;
 
-      // Se for pylon, usa o centro salvo
       if (zoneType === "FRONT_PYLON" || zoneType === "BACK_PYLON") {
         const info = pylonCenters[key];
         if (info) return info.cy;
@@ -465,15 +675,18 @@
       const laneIndex = LANE_ROWS[laneKey];
       if (laneIndex == null) return null;
 
-      const y = (laneIndex + 0.5) * cellH;
-      return y;
+      return (laneIndex + 0.5) * cellH;
+    }
+
+    function getZoneCenterX(fieldZone) {
+      const idx = FIELD_ZONES.indexOf(fieldZone);
+      if (idx === -1) return null;
+      return (idx + 0.5) * cellW;
     }
 
     // ==========================
-    // 6. LINHAS DOS PASSES (AirYds) + YAC
-    //    -> só desenha se houver zona selecionada
+    // 6. LINHAS DE PASSE + YAC + TIP/INT/SACK
     // ==========================
-
     const hasStartYard = passes.some(p => !isNaN(Number(p.StartYard)));
 
     if (hasStartYard && selectedZoneKey) {
@@ -487,69 +700,173 @@
       });
 
       passesForZone.forEach((p, index) => {
-        const passBy  = String(p.PassBy || "").trim();
-        const catchBy = String(p.CatchBy || "").trim();
+        const fieldZone = String(p.TargetFieldZone || "").trim();
+        const passBy   = String(p.PassBy || "").trim();
+        const catchBy  = String(p.CatchBy || "").trim();
+        const tipBy    = String(p.TipBy || "").trim();
+        const intBy    = String(p.IntBy || "").trim();
+        const sackBy   = String(p.SackBy || "").trim();
 
         const startYard = Number(p.StartYard);
         const airYds    = Number(p.AirYds);
         const yac       = Number(p.YAC);
+        const tipWhere  = Number(p.TipWhere);
+        const intWhere  = Number(p.IntWhere);
+        const sackWhere = Number(p.SackWhere);
+        const intYds    = Number(p.IntYds);
 
         if (isNaN(startYard)) return;
 
-        const targetY = getTargetY(p);
-        if (targetY == null) return;
+        const tip  = !!p.Tip;
+        const intr = !!p.Int;
+        const sack = !!p.Sack;
 
-        // --- JITTER VERTICAL LEVE POR PASSE (mais espalhado) ---
-        // 9 níveis: -amp .. +amp
-        const jitterAmp = Math.min(cellH * 0.35, 16);
-        const jitterStep = jitterAmp / 4; // [-4..4] * step
-        const jitter = ((index % 9) - 4) * jitterStep;
+        const baseTargetY = getTargetY(p);
+        if (!sack && baseTargetY == null) return;
 
-        const passCompleted = !!p.PassCompleted;
-        const strokeColor   = passCompleted ? "#00e676" : "#ff5252";
-        const baseOpacity   = 0.85;
+        const jitterAmp  = Math.min(cellH * 0.35, 16);
+        const jitterStep = jitterAmp / 4;
+        const jitter     = ((index % 9) - 4) * jitterStep;
 
         const startClamped = clamp(startYard, 0, 50);
-        const airEff = isNaN(airYds) ? 0 : airYds;
-        let catchYard = startClamped + airEff;
-        catchYard = clamp(catchYard, 0, 50);
+        const xStart = yardToX(startClamped);
+        const yStart = fieldH / 2 + jitter;
 
-        const x1 = xSelfGoal + (startClamped / 5) * cellW;
-        const y1 = fieldH / 2 + jitter; // início do passe
-        const x2 = xSelfGoal + (catchYard / 5) * cellW;
-        const y2 = targetY + jitter;     // fim do passe
+        // SACK
+        if (sack && !isNaN(sackWhere)) {
+          const sackClamped = clamp(sackWhere, 0, 50);
+          const xSack = yardToX(sackClamped);
+          const ySack = fieldH / 2 + jitter;
+
+          const sackGroup = createGroup(linesGroup, 0, 0);
+
+          const sackLine = createLine(sackGroup, xStart, yStart, xSack, ySack, "pass-line");
+          sackLine.setAttribute("stroke", "#ffab40");
+          sackLine.setAttribute("stroke-opacity", "0.95");
+
+          const xSize = 8;
+          const sx1 = createLine(
+            sackGroup,
+            xSack - xSize,
+            ySack - xSize,
+            xSack + xSize,
+            ySack + xSize,
+            "pass-x"
+          );
+          const sx2 = createLine(
+            sackGroup,
+            xSack - xSize,
+            ySack + xSize,
+            xSack + xSize,
+            ySack - xSize,
+            "pass-x"
+          );
+          [sx1, sx2].forEach(seg => {
+            seg.setAttribute("stroke", "#ffab40");
+            seg.setAttribute("stroke-opacity", "0.95");
+          });
+
+          sackGroup.addEventListener("mouseover", () => {
+            sackLine.setAttribute("stroke-opacity", "1");
+            sx1.setAttribute("stroke-opacity", "1");
+            sx2.setAttribute("stroke-opacity", "1");
+            linesGroup.appendChild(sackGroup);
+          });
+          sackGroup.addEventListener("mouseout", () => {
+            sackLine.setAttribute("stroke-opacity", "0.95");
+            sx1.setAttribute("stroke-opacity", "0.95");
+            sx2.setAttribute("stroke-opacity", "0.95");
+          });
+
+          sackGroup.addEventListener("click", evt => {
+            showPlayTooltip(evt, p, {
+              kind: "sack",
+              completed: false,
+              startYard: startClamped,
+              endYard: sackClamped,
+              airYds: null,
+              yac: null,
+              tipWhere: null,
+              intWhere: null,
+              sackWhere: sackClamped,
+              intYds: null
+            });
+          });
+
+          return;
+        }
+
+        // PASSE (normal / TIP / INT)
+        const passCompleted = !!p.PassCompleted;
+
+        let eventKind = "normal"; // "normal" | "tip" | "int"
+        let endYard;
+        let airEff = isNaN(airYds) ? 0 : airYds;
+
+        if (intr && !isNaN(intWhere)) {
+          eventKind = "int";
+          endYard   = clamp(intWhere, 0, 50);
+        } else if (tip && !isNaN(tipWhere)) {
+          eventKind = "tip";
+          endYard   = clamp(tipWhere, 0, 50);
+        } else {
+          endYard = clamp(startClamped + airEff, 0, 50);
+        }
+
+        const yEnd = (baseTargetY ?? fieldH / 2) + jitter;
+
+        let strokeColor;
+        if (eventKind === "int") {
+          strokeColor = "#ff9100";
+        } else if (eventKind === "tip") {
+          strokeColor = "#ff8a80";
+        } else {
+          strokeColor = passCompleted ? "#00e676" : "#ff5252";
+        }
+        const baseOpacity = 0.85;
+
+        let xEnd;
+        if (
+          eventKind === "normal" &&
+          !passCompleted &&
+          (!airEff || airEff === 0)
+        ) {
+          const centerX = getZoneCenterX(fieldZone);
+          xEnd = centerX != null ? centerX : yardToX(endYard);
+        } else {
+          xEnd = yardToX(endYard);
+        }
 
         const passGroup = createGroup(linesGroup, 0, 0);
 
-        // linha do passe (AirYds)
-        const line = createLine(passGroup, x1, y1, x2, y2, "pass-line");
+        const line = createLine(passGroup, xStart, yStart, xEnd, yEnd, "pass-line");
         line.setAttribute("stroke", strokeColor);
         line.setAttribute("stroke-opacity", String(baseOpacity));
 
-        // início
-        createCircle(passGroup, x1, y1, 4, "pass-start");
+        createCircle(passGroup, xStart, yStart, 4, "pass-start");
 
-        // X no fim do passe
-        const xSize = 7;
-        const px1 = createLine(passGroup, x2 - xSize, y2 - xSize, x2 + xSize, y2 + xSize, "pass-x");
-        const px2 = createLine(passGroup, x2 - xSize, y2 + xSize, x2 + xSize, y2 - xSize, "pass-x");
+        const xSize2 = 7;
+        const px1 = createLine(
+          passGroup,
+          xEnd - xSize2,
+          yEnd - xSize2,
+          xEnd + xSize2,
+          yEnd + xSize2,
+          "pass-x"
+        );
+        const px2 = createLine(
+          passGroup,
+          xEnd - xSize2,
+          yEnd + xSize2,
+          xEnd + xSize2,
+          yEnd - xSize2,
+          "pass-x"
+        );
         [px1, px2].forEach(seg => {
           seg.setAttribute("stroke", strokeColor);
           seg.setAttribute("stroke-opacity", String(baseOpacity));
         });
 
-        // tooltip do passe
-        if (passBy || !isNaN(airYds)) {
-          const titleEl = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "title"
-          );
-          const airStr = !isNaN(airYds) ? `, AirYds: ${airYds}` : "";
-          titleEl.textContent = `PassBy: ${passBy || "N/A"}${airStr}`;
-          passGroup.appendChild(titleEl);
-        }
-
-        // highlight da linha do passe
         passGroup.addEventListener("mouseover", () => {
           line.setAttribute("stroke-opacity", "1");
           px1.setAttribute("stroke-opacity", "1");
@@ -562,19 +879,34 @@
           px2.setAttribute("stroke-opacity", String(baseOpacity));
         });
 
-        // ---- YAC (se existir) ----
-        if (!isNaN(yac) && yac !== 0) {
-          let runYard = catchYard + yac;
+        passGroup.addEventListener("click", evt => {
+          showPlayTooltip(evt, p, {
+            kind: eventKind,
+            completed: passCompleted,
+            startYard: startClamped,
+            endYard,
+            airYds: airYds,
+            yac: yac,
+            tipWhere: tipWhere,
+            intWhere: intWhere,
+            sackWhere: null,
+            intYds: intYds
+          });
+        });
+
+        // YAC
+        if (eventKind === "normal" && !isNaN(yac) && yac !== 0) {
+          let runYard = endYard + yac;
           runYard = clamp(runYard, 0, 50);
 
-          const x3 = xSelfGoal + (runYard / 5) * cellW;
-          const y3 = y2; // mesma linha vertical do alvo, com jitter
+          const x3 = yardToX(runYard);
+          const y3 = yEnd;
 
           const yacGroup = createGroup(linesGroup, 0, 0);
           const yacAbs = Math.abs(yac);
           const yacOpacity = Math.max(0.3, Math.min(0.9, 0.3 + 0.05 * yacAbs));
 
-          const yLine = createLine(yacGroup, x2, y2, x3, y3, "yac-line");
+          const yLine = createLine(yacGroup, xEnd, yEnd, x3, y3, "yac-line");
           yLine.setAttribute("stroke-opacity", String(yacOpacity));
 
           const ySize = 7;
@@ -599,14 +931,7 @@
           });
 
           const catchLabel = catchBy || "N/A";
-          const title2 = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "title"
-          );
-          title2.textContent = `CatchBy: ${catchLabel}, YAC: ${yac}`;
-          yacGroup.appendChild(title2);
 
-          // HOVER DO YAC (ficar mais visível e por cima de tudo)
           yacGroup.addEventListener("mouseover", () => {
             yLine.setAttribute("stroke-opacity", "1");
             yx1.setAttribute("stroke-opacity", "1");
@@ -618,6 +943,95 @@
             yx1.setAttribute("stroke-opacity", String(yacOpacity));
             yx2.setAttribute("stroke-opacity", String(yacOpacity));
           });
+
+          yacGroup.addEventListener("click", evt => {
+            showPlayTooltip(evt, p, {
+              kind: "normal",
+              completed: passCompleted,
+              startYard: startClamped,
+              endYard,
+              airYds: airYds,
+              yac: yac,
+              tipWhere: tipWhere,
+              intWhere: intWhere,
+              sackWhere: null,
+              intYds: intYds
+            });
+          });
+        }
+
+        // RETORNO INT
+        if (eventKind === "int" && !isNaN(intYds) && intYds !== 0) {
+          const dir = intYds >= 0 ? -1 : 1;
+          const dist = Math.abs(intYds);
+          let retYard = endYard + dir * dist;
+          retYard = clamp(retYard, 0, 50);
+
+          const xRet = yardToX(retYard);
+          const yRet = yEnd;
+
+          const intGroup = createGroup(linesGroup, 0, 0);
+          const retOpacity = 0.9;
+
+          const rLine = createLine(
+            intGroup,
+            xEnd,
+            yEnd,
+            xRet,
+            yRet,
+            "int-return-line"
+          );
+          rLine.setAttribute("stroke", "#ffd54f");
+          rLine.setAttribute("stroke-opacity", String(retOpacity));
+
+          const rSize = 7;
+          const rx1 = createLine(
+            intGroup,
+            xRet - rSize,
+            yRet - rSize,
+            xRet + rSize,
+            yRet + rSize,
+            "int-return-x"
+          );
+          const rx2 = createLine(
+            intGroup,
+            xRet - rSize,
+            yRet + rSize,
+            xRet + rSize,
+            yRet - rSize,
+            "int-return-x"
+          );
+          [rx1, rx2].forEach(seg => {
+            seg.setAttribute("stroke", "#ffd54f");
+            seg.setAttribute("stroke-opacity", String(retOpacity));
+          });
+
+          intGroup.addEventListener("mouseover", () => {
+            rLine.setAttribute("stroke-opacity", "1");
+            rx1.setAttribute("stroke-opacity", "1");
+            rx2.setAttribute("stroke-opacity", "1");
+            linesGroup.appendChild(intGroup);
+          });
+          intGroup.addEventListener("mouseout", () => {
+            rLine.setAttribute("stroke-opacity", String(retOpacity));
+            rx1.setAttribute("stroke-opacity", String(retOpacity));
+            rx2.setAttribute("stroke-opacity", String(retOpacity));
+          });
+
+          intGroup.addEventListener("click", evt => {
+            showPlayTooltip(evt, p, {
+              kind: "int-return",
+              completed: false,
+              startYard: startClamped,
+              endYard,
+              airYds: airYds,
+              yac: null,
+              tipWhere: intWhere,
+              intWhere: intWhere,
+              sackWhere: null,
+              intYds: intYds
+            });
+          });
         }
       });
     }
@@ -627,14 +1041,12 @@
     // ==========================
     const arrowGroup = createGroup(svg, 0, 0);
 
-    const arrowY = margin.top + fieldH + 18; // posição vertical abaixo do campo
-    const arrowStartX = margin.left + 40; // ponta esquerda (início)
-    const arrowEndX = margin.left + fieldW - 40; // ponta direita (fim)
+    const arrowY = margin.top + fieldH + 20;
+    const arrowStartX = margin.left + 40;
+    const arrowEndX = margin.left + fieldW - 40;
 
-    // linha da seta (esquerda -> direita)
     createLine(arrowGroup, arrowStartX, arrowY, arrowEndX, arrowY, "mid-line");
 
-    // cabeça da seta apontando para a direita
     const arrowHead = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "polygon"
@@ -648,7 +1060,6 @@
     arrowHead.setAttribute("fill", "#ffffff");
     arrowGroup.appendChild(arrowHead);
 
-    // texto explicando o sentido
     createText(
       arrowGroup,
       (arrowStartX + arrowEndX) / 2,
@@ -658,7 +1069,55 @@
     );
 
     // ==========================
-    // 8. HELPERS SVG
+    // 8. LEGENDA
+    // ==========================
+    const legendGroup = createGroup(svg, 0, 0);
+
+    const legendItems = [
+      { color: "#00e676", text: "Passe completo", dashed: false },
+      { color: "#ff5252", text: "Passe incompleto", dashed: false },
+      { color: "#ff8a80", text: "Passe desviado", dashed: false },
+      { color: "#ff9100", text: "Intercepção", dashed: false },
+      { color: "#ffd54f", text: "Retorno de INT", dashed: true },
+      { color: "#ffab40", text: "Sack", dashed: false },
+      { color: "#40c4ff", text: "Jardas após o Catch", dashed: true }
+    ];
+
+    const legendCols = 4;
+    const colWidth = 150;
+    const rowHeight = 25;
+
+    const legendStartX = width - margin.right - legendCols * colWidth;
+    const legendStartY = arrowY + 15;
+
+    legendItems.forEach((item, idx) => {
+      const col = idx % legendCols;
+      const row = Math.floor(idx / legendCols);
+
+      const baseX = legendStartX + col * colWidth;
+      const baseY = legendStartY + row * rowHeight;
+
+      const line = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "line"
+      );
+      line.setAttribute("x1", baseX);
+      line.setAttribute("y1", baseY);
+      line.setAttribute("x2", baseX + 24);
+      line.setAttribute("y2", baseY);
+      line.setAttribute("stroke", item.color);
+      line.setAttribute("stroke-width", "3");
+      line.setAttribute("stroke-linecap", "round");
+      if (item.dashed) {
+        line.setAttribute("stroke-dasharray", "6 4");
+      }
+      legendGroup.appendChild(line);
+
+      createText(legendGroup, baseX + 20, baseY + 10, item.text, "zone-label");
+    });
+
+    // ==========================
+    // 9. HELPERS SVG
     // ==========================
     function createGroup(parent, tx, ty) {
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -707,7 +1166,7 @@
   }
 
   // ==========================
-  // 9. INTEGRAÇÃO COM LOOKER
+  // 10. INTEGRAÇÃO COM LOOKER
   // ==========================
   function drawViz(data /*, config */) {
     const rows = (data && data.tables && data.tables.DEFAULT) || [];
@@ -719,38 +1178,81 @@
       const startZoneArr = row["dim_StartFieldZone"] || [];
       const passByArr    = row["dim_PassBy"] || [];
       const catchByArr   = row["dim_CatchBy"] || [];
+      const tipByArr     = row["dim_TipBy"] || [];
+      const intByArr     = row["dim_IntBy"] || [];
+      const sackByArr    = row["dim_SackBy"] || [];
+      const playIdArr    = row["dim_PlayId"] || [];   // <- PlayId
+
       const startYArr    = row["met_StartYard"] || [];
       const airArr       = row["met_AirYds"] || [];
       const yacArr       = row["met_YAC"] || [];
-      const completedArr = row["met_PassCompleted"] || []; // 0/1
+      const completedArr = row["met_PassCompleted"] || [];
+      const downArr      = row["met_Down"] || [];
+      const toGoArr      = row["met_ToGo"] || [];
+      const firstDownArr = row["met_FirstDown"] || [];
+      const touchdownArr = row["met_Touchdown"] || [];
+
+      const tipArr       = row["met_Tip"] || [];
+      const intArr       = row["met_Int"] || [];
+      const sackArr      = row["met_Sack"] || [];
+      const tipWhereArr  = row["met_TipWhere"] || [];
+      const intWhereArr  = row["met_IntWhere"] || [];
+      const sackWhereArr = row["met_SackWhere"] || [];
+      const intYdsArr    = row["met_IntYds"] || [];
+
+      const gameIdArr    = row["dim_GameId"] || [];
+      const CampeonatoArr    = row["dim_Campeonato"] || [];
 
       return {
         TargetFieldZone: String(fzArr[0] ?? ""),
         TargetZone: String(zoneArr[0] ?? ""),
         TargetZoneSide: String(sideArr[0] ?? ""),
         StartFieldZone: String(startZoneArr[0] ?? ""),
+
         PassBy: String(passByArr[0] ?? ""),
         CatchBy: String(catchByArr[0] ?? ""),
+        TipBy:  String(tipByArr[0] ?? ""),
+        IntBy:  String(intByArr[0] ?? ""),
+        SackBy: String(sackByArr[0] ?? ""),
+
+        PlayId: String(playIdArr[0] ?? ""),
+        GameId: String(gameIdArr[0] ?? ""),
+        Campeonato: String(gameIdArr[0] ?? ""),
+
+        Down: Number(downArr[0] ?? NaN),
+        ToGo: Number(toGoArr[0] ?? NaN),
+
         StartYard: Number(startYArr[0] ?? NaN),
         AirYds: Number(airArr[0] ?? NaN),
         YAC: Number(yacArr[0] ?? NaN),
-        PassCompleted: Number(completedArr[0] ?? 0) ? 1 : 0
+
+        PassCompleted: Number(completedArr[0] ?? 0) ? 1 : 0,
+
+        Tip:  Number(tipArr[0] ?? 0) ? 1 : 0,
+        Int:  Number(intArr[0] ?? 0) ? 1 : 0,
+        Sack: Number(sackArr[0] ?? 0) ? 1 : 0,
+
+        TipWhere:  Number(tipWhereArr[0]  ?? NaN),
+        IntWhere:  Number(intWhereArr[0]  ?? NaN),
+        SackWhere: Number(sackWhereArr[0] ?? NaN),
+        IntYds:    Number(intYdsArr[0]    ?? NaN)
       };
     });
 
     lastPasses = passes;
-    selectedZoneKey = null; // reset seleção ao mudar filtro
+    selectedZoneKey = null;
     renderField();
   }
 
   if (typeof dscc !== "undefined") {
-    // Ambiente Looker Studio
     dscc.subscribeToData(drawViz, { transform: dscc.objectTransform });
   } else {
-    // Fallback local pra testar em HTML puro
     document.addEventListener("DOMContentLoaded", function () {
-      lastPasses = lastPasses = [
+      lastPasses = [
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 1,
           "TargetFieldZone": "10to15",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -762,6 +1264,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 2,
           "TargetFieldZone": "15to20",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -773,6 +1278,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 4,
           "TargetFieldZone": "SELF_ENDZONE",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -784,6 +1292,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 5,
           "TargetFieldZone": "35to40",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -795,6 +1306,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 6,
           "TargetFieldZone": "10to15",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -807,6 +1321,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 7,
           "TargetFieldZone": "15to20",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -819,6 +1336,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 8,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -828,9 +1348,13 @@
           "StartYard": 21.0,
           "AirYds": 29.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 9,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -840,9 +1364,13 @@
           "StartYard": 40.0,
           "AirYds": 10.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 10,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -852,9 +1380,13 @@
           "StartYard": 27.0,
           "AirYds": 23.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 11,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -866,6 +1398,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 12,
           "TargetFieldZone": "15to20",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -878,6 +1413,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 13,
           "TargetFieldZone": "25to30",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -887,9 +1425,13 @@
           "StartYard": 19.0,
           "AirYds": 7.0,
           "YAC": 5.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 14,
           "TargetFieldZone": "35to40",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -902,6 +1444,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 15,
           "TargetFieldZone": "45to50",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -911,9 +1456,13 @@
           "StartYard": 43.0,
           "AirYds": 6.0,
           "YAC": 1.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 16,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -923,9 +1472,13 @@
           "StartYard": 40.0,
           "AirYds": 10.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 17,
           "TargetFieldZone": "5to10",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -938,6 +1491,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 18,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -950,6 +1506,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 19,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "LEFT",
@@ -959,9 +1518,13 @@
           "StartYard": 23.0,
           "AirYds": 27.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 20,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "LEFT",
@@ -973,6 +1536,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 21,
           "TargetFieldZone": "15to20",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -985,6 +1551,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 22,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -994,9 +1563,13 @@
           "StartYard": 19.0,
           "AirYds": 4.0,
           "YAC": 9.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 23,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1008,6 +1581,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 24,
           "TargetFieldZone": "5to10",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1020,6 +1596,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 25,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1029,9 +1608,13 @@
           "StartYard": 21.0,
           "AirYds": 29.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 26,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1043,6 +1626,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 27,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1055,6 +1641,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 28,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1066,6 +1655,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 29,
           "TargetFieldZone": "30to35",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1077,6 +1669,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 30,
           "TargetFieldZone": "25to30",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1088,6 +1683,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 31,
           "TargetFieldZone": "15to20",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1099,6 +1697,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 32,
           "TargetFieldZone": "10to15",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1111,6 +1712,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 33,
           "TargetFieldZone": "25to30",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1120,9 +1724,13 @@
           "StartYard": 21.0,
           "AirYds": 4.0,
           "YAC": 1.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 34,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1134,6 +1742,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 35,
           "TargetFieldZone": "30to35",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1145,6 +1756,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 36,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1154,9 +1768,13 @@
           "StartYard": 26.0,
           "AirYds": 24.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "REGIONAL SUDESDE I",
+          "GameId": "2025CBFAJ1",
+          "PlayId": 38,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1168,6 +1786,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 39,
           "TargetFieldZone": "10to15",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1177,9 +1798,13 @@
           "StartYard": 5.0,
           "AirYds": 7.0,
           "YAC": 14.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 40,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -1191,6 +1816,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 41,
           "TargetFieldZone": "30to35",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1202,6 +1830,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 42,
           "TargetFieldZone": "35to40",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1214,6 +1845,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 43,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1223,9 +1857,13 @@
           "StartYard": 38.0,
           "AirYds": 12.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 44,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1235,9 +1873,13 @@
           "StartYard": 45.0,
           "AirYds": 10.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 45,
           "TargetFieldZone": "35to40",
           "TargetZone": "HOOK",
           "TargetZoneSide": "LEFT",
@@ -1249,6 +1891,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 46,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1260,6 +1905,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 47,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1272,6 +1920,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 48,
           "TargetFieldZone": "25to30",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1281,9 +1932,13 @@
           "StartYard": 24.0,
           "AirYds": 5.0,
           "YAC": 3.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 49,
           "TargetFieldZone": "30to35",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1296,6 +1951,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 50,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1305,9 +1963,13 @@
           "StartYard": 44.0,
           "AirYds": 6.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 51,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1317,9 +1979,13 @@
           "StartYard": 45.0,
           "AirYds": 5.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 52,
           "TargetFieldZone": "5to10",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1332,6 +1998,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 53,
           "TargetFieldZone": "45to50",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1343,6 +2012,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 54,
           "TargetFieldZone": "15to20",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1355,6 +2027,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 55,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1364,9 +2039,13 @@
           "StartYard": 22.0,
           "AirYds": 3.0,
           "YAC": 5.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 56,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1378,6 +2057,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 57,
           "TargetFieldZone": "30to35",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1390,6 +2072,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 58,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1401,6 +2086,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 59,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1412,6 +2100,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 60,
           "TargetFieldZone": "20to25",
           "TargetZone": "HOOK",
           "TargetZoneSide": "MIDDLE",
@@ -1423,6 +2114,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 61,
           "TargetFieldZone": "15to20",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1435,6 +2129,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 62,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1444,9 +2141,13 @@
           "StartYard": 19.0,
           "AirYds": 31.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 63,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1456,9 +2157,13 @@
           "StartYard": 45.0,
           "AirYds": 0.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 64,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1470,6 +2175,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 65,
           "TargetFieldZone": "5to10",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1482,6 +2190,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 66,
           "TargetFieldZone": "20to25",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1491,9 +2202,13 @@
           "StartYard": 10.0,
           "AirYds": 14.0,
           "YAC": 6.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 67,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1505,6 +2220,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 68,
           "TargetFieldZone": "35to40",
           "TargetZone": "OUT",
           "TargetZoneSide": "LEFT",
@@ -1516,6 +2234,9 @@
           "PassCompleted": 0
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 69,
           "TargetFieldZone": "35to40",
           "TargetZone": "OUT",
           "TargetZoneSide": "RIGHT",
@@ -1528,6 +2249,9 @@
           "PassCompleted": 1
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 70,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "CURL",
           "TargetZoneSide": "RIGHT",
@@ -1537,9 +2261,13 @@
           "StartYard": 47.0,
           "AirYds": 3.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 71,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "LEFT",
@@ -1549,9 +2277,13 @@
           "StartYard": 45.0,
           "AirYds": 5.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 73,
           "TargetFieldZone": "25to30",
           "TargetZone": "CURL",
           "TargetZoneSide": "LEFT",
@@ -1561,9 +2293,13 @@
           "StartYard": 15.0,
           "AirYds": 12.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "FirstDown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 75,
           "TargetFieldZone": "OPP_ENDZONE_BACK",
           "TargetZone": "BACK_PYLON",
           "TargetZoneSide": "RIGHT",
@@ -1573,9 +2309,13 @@
           "StartYard": 45.0,
           "AirYds": 5.0,
           "YAC": 0.0,
-          "PassCompleted": 1
+          "PassCompleted": 1,
+          "Touchdown": true
         },
         {
+          "Campeonato": "PAULISTA",
+          "GameId": "2025APFAJ7",
+          "PlayId": 76,
           "TargetFieldZone": "OPP_ENDZONE_FRONT",
           "TargetZone": "FRONT_PYLON",
           "TargetZoneSide": "LEFT",
@@ -1587,7 +2327,6 @@
           "PassCompleted": 0
         }
       ];
-      
       renderField();
     });
   }
