@@ -1,263 +1,183 @@
 {
   "data": [
     {
-      "id": "passes",
-      "label": "Dados de passes",
+      "id": "main",
+      "label": "Dados do campo de passes",
       "elements": [
         {
           "id": "dim_TargetFieldZone",
           "label": "Target Field Zone",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 1, "max": 1 }
         },
         {
           "id": "dim_TargetZone",
-          "label": "Target Zone (OUT / CURL / HOOK / PYLON)",
+          "label": "Target Zone",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 1, "max": 1 }
         },
         {
           "id": "dim_TargetZoneSide",
-          "label": "Target Zone Side (LEFT / MIDDLE / RIGHT)",
+          "label": "Target Zone Side",
           "type": "DIMENSION",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 1, "max": 1 }
+        },
+
+        {
+          "id": "dim_StartFieldZone",
+          "label": "Start Field Zone",
+          "type": "DIMENSION",
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "dim_PassBy",
           "label": "QB (PassBy)",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "dim_CatchBy",
-          "label": "Recebedor (CatchBy)",
+          "label": "Recebedor / Target (CatchBy)",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "dim_TipBy",
-          "label": "Defensor do TIP (TipBy)",
+          "label": "Defensor no TIP (TipBy)",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "dim_IntBy",
-          "label": "Defensor da INT (IntBy)",
+          "label": "Defensor na INT (IntBy)",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "dim_SackBy",
-          "label": "Defensor do Sack (SackBy)",
+          "label": "Defensor no Sack (SackBy)",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "dim_PlayId",
           "label": "PlayId",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "dim_GameId",
           "label": "GameId",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
-
         {
-          "id": "dim_StartFieldZone",
-          "label": "Start Field Zone (opcional)",
+          "id": "dim_Campeonato",
+          "label": "Campeonato",
           "type": "DIMENSION",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["TEXT"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "met_StartYard",
-          "label": "StartYard",
+          "label": "Start Yard",
           "type": "METRIC",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 1, "max": 1 }
         },
         {
           "id": "met_AirYds",
-          "label": "AirYds",
+          "label": "Air Yards",
           "type": "METRIC",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 1, "max": 1 }
         },
         {
           "id": "met_YAC",
-          "label": "YAC",
+          "label": "YAC (Yards After Catch)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "met_PassCompleted",
-          "label": "PassCompleted (0/1)",
+          "label": "Passe Completo? (0/1 ou TRUE/FALSE)",
           "type": "METRIC",
-          "options": {
-            "min": 1,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 1, "max": 1 }
         },
 
         {
           "id": "met_Down",
           "label": "Down",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_ToGo",
-          "label": "ToGo",
+          "label": "To Go",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
+        },
+        {
+          "id": "met_FirstDown",
+          "label": "First Down (0/1)",
+          "type": "METRIC",
+          "options": { "min": 0, "max": 1 }
+        },
+        {
+          "id": "met_Touchdown",
+          "label": "Touchdown (0/1)",
+          "type": "METRIC",
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "met_Tip",
           "label": "Tip (0/1)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_Int",
-          "label": "Int (0/1)",
+          "label": "Intercepção (0/1)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_Sack",
           "label": "Sack (0/1)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
 
         {
           "id": "met_TipWhere",
-          "label": "TipWhere (jarda do desvio)",
+          "label": "Jarda do Tip (TipWhere)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_IntWhere",
-          "label": "IntWhere (jarda da interceptação)",
+          "label": "Jarda da INT (IntWhere)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_SackWhere",
-          "label": "SackWhere (jarda do sack)",
+          "label": "Jarda do Sack (SackWhere)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         },
         {
           "id": "met_IntYds",
-          "label": "IntYds (retorno da interceptação)",
+          "label": "Jardas de Retorno da INT (IntYds)",
           "type": "METRIC",
-          "options": {
-            "min": 0,
-            "max": 1,
-            "supportedTypes": ["NUMBER"]
-          }
+          "options": { "min": 0, "max": 1 }
         }
       ]
     }
   ],
   "style": [],
-  "interactions": [],
-  "features": {
-    "enableComparisonDateRange": false
-  }
+  "themeStyle": [],
+  "interactions": []
 }
